@@ -1,23 +1,16 @@
 package ru.yandex.practicum.mymarket.repository;
 
-import org.springframework.data.jpa.repository.EntityGraph;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.entity.CartItem;
 
-import java.util.List;
-import java.util.Optional;
+public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long> {
 
-public interface CartItemRepository extends JpaRepository<CartItem, Long> {
+  Flux<CartItem> findBySessionId(String sessionId);
 
-  @EntityGraph(attributePaths = "item")
-  List<CartItem> findBySessionId(String sessionId);
+  Mono<CartItem> findBySessionIdAndItemId(String sessionId, Long itemId);
 
-  Optional<CartItem> findBySessionIdAndItemId(String sessionId, Long itemId);
-
-  @Modifying(clearAutomatically = true)
-  @Query("DELETE FROM CartItem c WHERE c.sessionId = :sid")
-  void deleteBySessionId(@Param("sid") String sessionId);
+  // Derived delete — returns Mono<Void>, no @Modifying needed in R2DBC
+  Mono<Void> deleteBySessionId(String sessionId);
 }
