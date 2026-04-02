@@ -1,19 +1,17 @@
 package ru.yandex.practicum.mymarket.service;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartAction;
+import ru.yandex.practicum.mymarket.dto.ItemDto;
 import ru.yandex.practicum.mymarket.entity.CartItem;
-import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
 
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
-@Transactional(readOnly = true)
 public class CartService {
 
   private final CartItemRepository cartItemRepository;
@@ -25,75 +23,74 @@ public class CartService {
     this.itemRepository = itemRepository;
   }
 
-  @Transactional
-  public void handleAction(String sessionId, long itemId, CartAction action) {
-    switch (action) {
+  public Mono<Void> handleAction(String sessionId, long itemId, CartAction action) {
+    return switch (action) {
       case PLUS   -> addItem(sessionId, itemId);
       case MINUS  -> decreaseItem(sessionId, itemId);
       case DELETE -> removeItem(sessionId, itemId);
-    }
+    };
   }
 
-  public List<CartItem> getCartItems(String sessionId) {
+  // Used by OrderService to iterate cart items before clearing them
+  public Flux<CartItem> getCartItems(String sessionId) {
     return cartItemRepository.findBySessionId(sessionId);
   }
 
-  public int getItemCount(String sessionId, long itemId) {
+  // Enriches each CartItem with its full Item data; used by controllers and OrderService
+  public Flux<ItemDto> getCartItemDtos(String sessionId) {
+    return cartItemRepository.findBySessionId(sessionId)
+        .flatMap(ci -> itemRepository.findById(ci.getItemId())
+            .map(item -> ItemDto.from(item, ci.getCount())));
+  }
+
+  public Mono<Integer> getItemCount(String sessionId, long itemId) {
     return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
         .map(CartItem::getCount)
-        .orElse(0);
+        .defaultIfEmpty(0);
   }
 
-  public Map<Long, Integer> getCartItemCounts(String sessionId) {
-    return cartItemRepository.findBySessionId(sessionId).stream()
-        .collect(Collectors.toMap(
-            ci -> ci.getItem().getId(),
-            CartItem::getCount
-        ));
+  public Mono<Map<Long, Integer>> getCartItemCounts(String sessionId) {
+    return cartItemRepository.findBySessionId(sessionId)
+        .collectMap(CartItem::getItemId, CartItem::getCount);
   }
 
-  public long getCartTotal(String sessionId) {
-    return cartItemRepository.findBySessionId(sessionId).stream()
-        .mapToLong(ci -> ci.getItem().getPrice() * ci.getCount())
-        .sum();
+  public Mono<Long> getCartTotal(String sessionId) {
+    return cartItemRepository.findBySessionId(sessionId)
+        .flatMap(ci -> itemRepository.findById(ci.getItemId())
+            .map(item -> item.getPrice() * (long) ci.getCount()))
+        .reduce(0L, Long::sum);
   }
 
-  @Transactional
-  public void addItem(String sessionId, long itemId) {
-    var existing = cartItemRepository.findBySessionIdAndItemId(sessionId, itemId);
-
-    if (existing.isPresent()) {
-      CartItem ci = existing.get();
-      ci.setCount(ci.getCount() + 1);
-      cartItemRepository.save(ci);
-    } else {
-      Item item = itemRepository.findById(itemId)
-          .orElseThrow(() -> new RuntimeException("Товар не найден: " + itemId));
-      cartItemRepository.save(new CartItem(sessionId, item, 1));
-    }
+  public Mono<Void> addItem(String sessionId, long itemId) {
+    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+        .flatMap(ci -> {
+          ci.setCount(ci.getCount() + 1);
+          return cartItemRepository.save(ci).then();
+        })
+        .switchIfEmpty(
+            itemRepository.findById(itemId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Товар не найден: " + itemId)))
+                .flatMap(item -> cartItemRepository.save(new CartItem(sessionId, item.getId(), 1)).then())
+        );
   }
 
-  @Transactional
-  public void decreaseItem(String sessionId, long itemId) {
-    cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
-        .ifPresent(ci -> {
+  public Mono<Void> decreaseItem(String sessionId, long itemId) {
+    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+        .flatMap(ci -> {
           if (ci.getCount() <= 1) {
-            cartItemRepository.delete(ci);
-          } else {
-            ci.setCount(ci.getCount() - 1);
-            cartItemRepository.save(ci);
+            return cartItemRepository.delete(ci);
           }
+          ci.setCount(ci.getCount() - 1);
+          return cartItemRepository.save(ci).then();
         });
   }
 
-  @Transactional
-  public void removeItem(String sessionId, long itemId) {
-    cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
-        .ifPresent(cartItemRepository::delete);
+  public Mono<Void> removeItem(String sessionId, long itemId) {
+    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+        .flatMap(cartItemRepository::delete);
   }
 
-  @Transactional
-  public void clearCart(String sessionId) {
-    cartItemRepository.deleteBySessionId(sessionId);
+  public Mono<Void> clearCart(String sessionId) {
+    return cartItemRepository.deleteBySessionId(sessionId);
   }
 }
