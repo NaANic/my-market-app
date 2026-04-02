@@ -1,13 +1,11 @@
 package ru.yandex.practicum.mymarket.controller;
 
-import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.mymarket.dto.OrderDto;
+import org.springframework.web.server.WebSession;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.service.OrderService;
-
-import java.util.List;
 
 @Controller
 public class OrderController {
@@ -19,29 +17,30 @@ public class OrderController {
   }
 
   @GetMapping("/orders")
-  public String orders(HttpSession session, Model model) {
-    List<OrderDto> orders = orderService.getOrders(session.getId()).stream()
-        .map(OrderDto::from)
-        .toList();
-    model.addAttribute("orders", orders);
-    return "orders";
+  public Mono<String> orders(WebSession session, Model model) {
+    return orderService.getOrders(session.getId())
+        .collectList()
+        .doOnNext(orders -> model.addAttribute("orders", orders))
+        .thenReturn("orders");
   }
 
   @GetMapping("/orders/{id}")
-  public String order(
+  public Mono<String> order(
       @PathVariable long id,
       @RequestParam(defaultValue = "false") boolean newOrder,
       Model model
   ) {
-    OrderDto order = OrderDto.from(orderService.getOrder(id));
-    model.addAttribute("order", order);
-    model.addAttribute("newOrder", newOrder);
-    return "order";
+    return orderService.getOrder(id)
+        .doOnNext(order -> {
+          model.addAttribute("order", order);
+          model.addAttribute("newOrder", newOrder);
+        })
+        .thenReturn("order");
   }
 
   @PostMapping("/buy")
-  public String buy(HttpSession session) {
-    Long orderId = orderService.createOrder(session.getId());
-    return "redirect:/orders/" + orderId + "?newOrder=true";
+  public Mono<String> buy(WebSession session) {
+    return orderService.createOrder(session.getId())
+        .map(orderId -> "redirect:/orders/" + orderId + "?newOrder=true");
   }
 }

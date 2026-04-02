@@ -1,14 +1,12 @@
 package ru.yandex.practicum.mymarket.controller;
 
-import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.WebSession;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartAction;
-import ru.yandex.practicum.mymarket.dto.ItemDto;
 import ru.yandex.practicum.mymarket.service.CartService;
-
-import java.util.List;
 
 @Controller
 @RequestMapping("/cart")
@@ -21,30 +19,29 @@ public class CartController {
   }
 
   @GetMapping("/items")
-  public String cart(HttpSession session, Model model) {
-    populateCartModel(session.getId(), model);
-    return "cart";
+  public Mono<String> cart(WebSession session, Model model) {
+    return populateCartModel(session.getId(), model).thenReturn("cart");
   }
 
   @PostMapping("/items")
-  public String modifyCart(
+  public Mono<String> modifyCart(
       @RequestParam long id,
       @RequestParam CartAction action,
-      HttpSession session,
+      WebSession session,
       Model model
   ) {
-    cartService.handleAction(session.getId(), id, action);
-    populateCartModel(session.getId(), model);
-    return "cart";
+    return cartService.handleAction(session.getId(), id, action)
+        .then(populateCartModel(session.getId(), model))
+        .thenReturn("cart");
   }
 
-  private void populateCartModel(String sessionId, Model model) {
-    List<ItemDto> items = cartService.getCartItems(sessionId).stream()
-        .map(ci -> ItemDto.from(ci.getItem(), ci.getCount()))
-        .toList();
-    long total = cartService.getCartTotal(sessionId);
-
-    model.addAttribute("items", items);
-    model.addAttribute("total", total);
+  private Mono<Void> populateCartModel(String sessionId, Model model) {
+    return Mono.zip(
+        cartService.getCartItemDtos(sessionId).collectList(),
+        cartService.getCartTotal(sessionId)
+    ).doOnNext(tuple -> {
+      model.addAttribute("items", tuple.getT1());
+      model.addAttribute("total", tuple.getT2());
+    }).then();
   }
 }
