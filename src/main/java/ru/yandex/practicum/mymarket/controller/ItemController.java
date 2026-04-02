@@ -46,6 +46,7 @@ public class ItemController {
         sort.toSort()
     );
 
+    session.start();
     return Mono.zip(
         itemService.findItems(search, pageable),
         cartService.getCartItemCounts(session.getId())
@@ -85,6 +86,7 @@ public class ItemController {
         .queryParam("pageNumber", pageNumber)
         .queryParam("pageSize", pageSize);
 
+    session.start();
     String redirectUrl = "redirect:" + builder.toUriString();
     return cartService.handleAction(session.getId(), id, action)
         .thenReturn(redirectUrl);
@@ -96,6 +98,7 @@ public class ItemController {
       WebSession session,
       Model model
   ) {
+    session.start();
     return Mono.zip(
         itemService.findById(id),
         cartService.getItemCount(session.getId(), id)
@@ -112,6 +115,7 @@ public class ItemController {
       WebSession session,
       Model model
   ) {
+    session.start();
     return cartService.handleAction(session.getId(), id, action)
         .then(Mono.zip(
             itemService.findById(id),

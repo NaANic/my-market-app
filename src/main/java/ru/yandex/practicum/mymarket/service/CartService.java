@@ -62,16 +62,19 @@ public class CartService {
   }
 
   public Mono<Void> addItem(String sessionId, long itemId) {
+    // flatMap must return Mono<CartItem> (non-empty) so that switchIfEmpty is not triggered
+    // after updating an existing item. The .then() is applied at the end of the whole chain.
     return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
         .flatMap(ci -> {
           ci.setCount(ci.getCount() + 1);
-          return cartItemRepository.save(ci).then();
+          return cartItemRepository.save(ci);
         })
         .switchIfEmpty(
             itemRepository.findById(itemId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Товар не найден: " + itemId)))
-                .flatMap(item -> cartItemRepository.save(new CartItem(sessionId, item.getId(), 1)).then())
-        );
+                .flatMap(item -> cartItemRepository.save(new CartItem(sessionId, item.getId(), 1)))
+        )
+        .then();
   }
 
   public Mono<Void> decreaseItem(String sessionId, long itemId) {
