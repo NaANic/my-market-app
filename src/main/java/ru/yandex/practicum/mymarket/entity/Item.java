@@ -1,25 +1,22 @@
 package ru.yandex.practicum.mymarket.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "items")
+@Table("items")
 public class Item {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(nullable = false)
   private String title;
 
-  @Column(columnDefinition = "TEXT")
   private String description;
 
-  @Column(name = "img_path")
+  @Column("img_path")
   private String imgPath;
 
-  @Column(nullable = false)
   private long price;
 
   public Item() {}

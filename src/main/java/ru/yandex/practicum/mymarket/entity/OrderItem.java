@@ -1,34 +1,31 @@
 package ru.yandex.practicum.mymarket.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "order_items")
+@Table("order_items")
 public class OrderItem {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @ManyToOne(optional = false, fetch = FetchType.LAZY)
-  @JoinColumn(name = "order_id", nullable = false)
-  private CustomerOrder order;
+  @Column("order_id")
+  private Long orderId;
 
-  @Column(name = "item_id")
+  @Column("item_id")
   private Long itemId;
 
-  @Column(nullable = false)
   private String title;
 
-  @Column(nullable = false)
   private long price;
 
-  @Column(nullable = false)
   private int count;
 
   public OrderItem() {}
 
-  public OrderItem(Long itemId, String title, long price, int count) {
+  public OrderItem(Long orderId, Long itemId, String title, long price, int count) {
+    this.orderId = orderId;
     this.itemId = itemId;
     this.title = title;
     this.price = price;
@@ -37,8 +34,8 @@ public class OrderItem {
 
   public Long getId() { return id; }
 
-  public CustomerOrder getOrder() { return order; }
-  public void setOrder(CustomerOrder order) { this.order = order; }
+  public Long getOrderId() { return orderId; }
+  public void setOrderId(Long orderId) { this.orderId = orderId; }
 
   public Long getItemId() { return itemId; }
   public void setItemId(Long itemId) { this.itemId = itemId; }
