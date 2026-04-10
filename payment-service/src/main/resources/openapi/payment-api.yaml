@@ -1,0 +1,99 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  description: Manages account balance and payment processing for the online store.
+  version: 1.0.0
+
+tags:
+  - name: payment
+
+paths:
+  /balance:
+    get:
+      tags: [payment]
+      operationId: getBalance
+      summary: Get current account balance
+      responses:
+        "200":
+          description: Current balance in kopecks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResponse"
+
+  /payment:
+    post:
+      tags: [payment]
+      operationId: processPayment
+      summary: Deduct amount from balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRequest"
+      responses:
+        "200":
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResponse"
+        "402":
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentError"
+
+components:
+  schemas:
+    BalanceResponse:
+      type: object
+      properties:
+        balance:
+          type: integer
+          format: int64
+          description: Current balance in kopecks
+          example: 100000
+
+    PaymentRequest:
+      type: object
+      required: [orderId, amount]
+      properties:
+        orderId:
+          type: integer
+          format: int64
+          description: ID of the order being paid
+          example: 42
+        amount:
+          type: integer
+          format: int64
+          description: Amount to deduct in kopecks
+          example: 5000
+
+    PaymentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the payment succeeded
+          example: true
+        remainingBalance:
+          type: integer
+          format: int64
+          description: Balance after the deduction in kopecks
+          example: 95000
+
+    PaymentError:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Human-readable error
+          example: "Insufficient funds"
+        balance:
+          type: integer
+          format: int64
+          description: Current (insufficient) balance in kopecks
+          example: 3000
