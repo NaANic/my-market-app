@@ -40,6 +40,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Reactive Redis (Lettuce driver is included) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
         <!-- Dev tools -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

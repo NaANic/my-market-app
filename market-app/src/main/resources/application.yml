@@ -8,5 +8,14 @@ spring:
     init:
       mode: always
 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
   thymeleaf:
     cache: false
+
+cache:
+  item:
+    ttl-minutes: 5
