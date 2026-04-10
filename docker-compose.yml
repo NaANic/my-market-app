@@ -18,15 +18,16 @@ services:
       retries: 5
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: market-app/Dockerfile
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/shopfront
-      SPRING_DATASOURCE_USERNAME: shopfront
-      SPRING_DATASOURCE_PASSWORD: shopfront
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/shopfront
+      SPRING_R2DBC_USERNAME: shopfront
+      SPRING_R2DBC_PASSWORD: shopfront
     depends_on:
       db:
         condition: service_healthy
