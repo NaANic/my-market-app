@@ -12,6 +12,13 @@ public interface ItemRepository extends R2dbcRepository<Item, Long> {
   // Derived query — Spring Data R2DBC applies sort + limit + offset from Pageable
   Flux<Item> findAllBy(Pageable pageable);
 
+  /**
+   * Fetches all items whose IDs are in the given collection with a single
+   * {@code WHERE id IN (...)} query — used by CartService to eliminate N+1.
+   * Spring Data derives this query from the method name; no @Query needed.
+   */
+  Flux<Item> findAllByIdIn(java.util.Collection<Long> ids);
+
   @Query("""
            SELECT * FROM items
            WHERE LOWER(title) LIKE LOWER(CONCAT('%', :query, '%'))

@@ -20,7 +20,6 @@ public class CartController {
 
   @GetMapping("/items")
   public Mono<String> cart(WebSession session, Model model) {
-    session.start();
     return populateCartModel(session.getId(), model).thenReturn("cart");
   }
 
@@ -31,7 +30,6 @@ public class CartController {
       WebSession session,
       Model model
   ) {
-    session.start();
     return cartService.handleAction(session.getId(), id, action)
         .then(populateCartModel(session.getId(), model))
         .thenReturn("cart");

@@ -129,8 +129,10 @@ class CartServiceTest {
         new CartItem("s1", 1L, 2),
         new CartItem("s1", 2L, 3)
     ));
-    when(itemRepository.findById(1L)).thenReturn(Mono.just(createItem(1L, "A", 1000)));
-    when(itemRepository.findById(2L)).thenReturn(Mono.just(createItem(2L, "B", 2500)));
+    when(itemRepository.findAllByIdIn(any())).thenReturn(Flux.just(
+        createItem(1L, "A", 1000),
+        createItem(2L, "B", 2500)
+    ));
 
     StepVerifier.create(cartService.getCartTotal("s1"))
         .assertNext(total -> assertThat(total).isEqualTo(9500L))

@@ -18,7 +18,6 @@ public class OrderController {
 
   @GetMapping("/orders")
   public Mono<String> orders(WebSession session, Model model) {
-    session.start();
     return orderService.getOrders(session.getId())
         .collectList()
         .doOnNext(orders -> model.addAttribute("orders", orders))
@@ -41,7 +40,6 @@ public class OrderController {
 
   @PostMapping("/buy")
   public Mono<String> buy(WebSession session) {
-    session.start();
     return orderService.createOrder(session.getId())
         .map(orderId -> "redirect:/orders/" + orderId + "?newOrder=true");
   }

@@ -6,6 +6,8 @@ import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.OrderDto;
 import ru.yandex.practicum.mymarket.entity.CustomerOrder;
 import ru.yandex.practicum.mymarket.entity.OrderItem;
+import ru.yandex.practicum.mymarket.exception.CartIsEmptyException;
+import ru.yandex.practicum.mymarket.exception.EntityNotFoundException;
 import ru.yandex.practicum.mymarket.repository.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repository.OrderRepository;
 
@@ -30,7 +32,7 @@ public class OrderService {
         .collectList()
         .flatMap(dtos -> {
           if (dtos.isEmpty()) {
-            return Mono.error(new RuntimeException("Корзина пуста"));
+            return Mono.error(new CartIsEmptyException(sessionId));
           }
           long totalSum = dtos.stream()
               .mapToLong(dto -> dto.price() * dto.count())
@@ -62,7 +64,7 @@ public class OrderService {
 
   public Mono<OrderDto> getOrder(long id) {
     return orderRepository.findById(id)
-        .switchIfEmpty(Mono.error(new RuntimeException("Заказ не найден: id=" + id)))
+        .switchIfEmpty(Mono.error(new EntityNotFoundException("Заказ", id)))
         .flatMap(order -> orderItemRepository.findByOrderId(order.getId())
             .collectList()
             .map(items -> OrderDto.of(order, items)));

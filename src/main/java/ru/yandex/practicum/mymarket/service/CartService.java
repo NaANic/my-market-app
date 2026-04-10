@@ -6,9 +6,12 @@ import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartAction;
 import ru.yandex.practicum.mymarket.dto.ItemDto;
 import ru.yandex.practicum.mymarket.entity.CartItem;
+import ru.yandex.practicum.mymarket.entity.Item;
+import ru.yandex.practicum.mymarket.exception.EntityNotFoundException;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -36,11 +39,25 @@ public class CartService {
     return cartItemRepository.findBySessionId(sessionId);
   }
 
-  // Enriches each CartItem with its full Item data; used by controllers and OrderService
+  // Enriches each CartItem with its full Item data; used by controllers and OrderService.
+  // Two-query approach: 1 query for cart rows + 1 IN query for all items — no N+1.
   public Flux<ItemDto> getCartItemDtos(String sessionId) {
     return cartItemRepository.findBySessionId(sessionId)
-        .flatMap(ci -> itemRepository.findById(ci.getItemId())
-            .map(item -> ItemDto.from(item, ci.getCount())));
+        .collectList()
+        .flatMapMany(cartItems -> {
+          if (cartItems.isEmpty()) return Flux.empty();
+          List<Long> ids = cartItems.stream().map(CartItem::getItemId).toList();
+          return itemRepository.findAllByIdIn(ids)
+              .collectMap(Item::getId)
+              .flatMapMany(itemMap -> Flux.fromIterable(cartItems)
+                  .flatMap(ci -> {
+                    Item item = itemMap.get(ci.getItemId());
+                    if (item == null) {
+                      return Mono.error(new EntityNotFoundException("Товар", ci.getItemId()));
+                    }
+                    return Mono.just(ItemDto.from(item, ci.getCount()));
+                  }));
+        });
   }
 
   public Mono<Integer> getItemCount(String sessionId, long itemId) {
@@ -54,11 +71,22 @@ public class CartService {
         .collectMap(CartItem::getItemId, CartItem::getCount);
   }
 
+  // Two-query approach: 1 query for cart rows + 1 IN query for all items — no N+1.
   public Mono<Long> getCartTotal(String sessionId) {
     return cartItemRepository.findBySessionId(sessionId)
-        .flatMap(ci -> itemRepository.findById(ci.getItemId())
-            .map(item -> item.getPrice() * (long) ci.getCount()))
-        .reduce(0L, Long::sum);
+        .collectList()
+        .flatMap(cartItems -> {
+          if (cartItems.isEmpty()) return Mono.just(0L);
+          List<Long> ids = cartItems.stream().map(CartItem::getItemId).toList();
+          return itemRepository.findAllByIdIn(ids)
+              .collectMap(Item::getId)
+              .map(itemMap -> cartItems.stream()
+                  .mapToLong(ci -> {
+                    Item item = itemMap.get(ci.getItemId());
+                    return item != null ? item.getPrice() * (long) ci.getCount() : 0L;
+                  })
+                  .sum());
+        });
   }
 
   public Mono<Void> addItem(String sessionId, long itemId) {
@@ -71,7 +99,7 @@ public class CartService {
         })
         .switchIfEmpty(
             itemRepository.findById(itemId)
-                .switchIfEmpty(Mono.error(new RuntimeException("Товар не найден: " + itemId)))
+                .switchIfEmpty(Mono.error(new EntityNotFoundException("Товар", itemId)))
                 .flatMap(item -> cartItemRepository.save(new CartItem(sessionId, item.getId(), 1)))
         )
         .then();
