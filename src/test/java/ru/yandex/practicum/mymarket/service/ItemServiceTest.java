@@ -5,19 +5,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
 
-import java.util.List;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ItemServiceTest {
@@ -29,52 +29,80 @@ class ItemServiceTest {
   ItemService itemService;
 
   @Test
-  void findItems_withSearch_delegatesToSearchMethod() {
-    Page<Item> expected = new PageImpl<>(List.of(createItem(1L, "Мяч", 500)));
-    when(itemRepository.search(eq("мяч"), any(Pageable.class))).thenReturn(expected);
+  void findItems_withSearch_usesSearchRepository() {
+    Item item = createItem(1L, "Мяч", 500);
+    when(itemRepository.searchBy(eq("мяч"), any())).thenReturn(Flux.just(item));
+    when(itemRepository.countBySearch(eq("мяч"))).thenReturn(Mono.just(1L));
 
-    Page<Item> result = itemService.findItems("мяч", PageRequest.of(0, 5));
+    StepVerifier.create(itemService.findItems("мяч", PageRequest.of(0, 5)))
+        .assertNext(page -> {
+          assertThat(page.getContent()).hasSize(1);
+          assertThat(page.getTotalElements()).isEqualTo(1);
+          assertThat(page.getContent().get(0).getTitle()).isEqualTo("Мяч");
+        })
+        .verifyComplete();
 
-    assertThat(result.getContent()).hasSize(1);
-    verify(itemRepository).search(eq("мяч"), any(Pageable.class));
-    verify(itemRepository, never()).findAll(any(Pageable.class));
+    verify(itemRepository).searchBy(eq("мяч"), any());
+    verify(itemRepository, never()).findAllBy(any());
   }
 
   @Test
-  void findItems_withBlankSearch_delegatesToFindAll() {
-    when(itemRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
+  void findItems_withBlankSearch_usesFindAll() {
+    when(itemRepository.findAllBy(any())).thenReturn(Flux.empty());
+    when(itemRepository.count()).thenReturn(Mono.just(0L));
 
-    itemService.findItems("   ", PageRequest.of(0, 5));
+    StepVerifier.create(itemService.findItems("   ", PageRequest.of(0, 5)))
+        .assertNext(page -> assertThat(page.getContent()).isEmpty())
+        .verifyComplete();
 
-    verify(itemRepository).findAll(any(Pageable.class));
-    verify(itemRepository, never()).search(any(), any());
+    verify(itemRepository).findAllBy(any());
+    verify(itemRepository, never()).searchBy(any(), any());
   }
 
   @Test
-  void findItems_withNullSearch_delegatesToFindAll() {
-    when(itemRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
+  void findItems_withNullSearch_usesFindAll() {
+    when(itemRepository.findAllBy(any())).thenReturn(Flux.empty());
+    when(itemRepository.count()).thenReturn(Mono.just(0L));
 
-    itemService.findItems(null, PageRequest.of(0, 5));
+    StepVerifier.create(itemService.findItems(null, PageRequest.of(0, 5)))
+        .assertNext(page -> assertThat(page.getContent()).isEmpty())
+        .verifyComplete();
 
-    verify(itemRepository).findAll(any(Pageable.class));
+    verify(itemRepository).findAllBy(any());
+  }
+
+  @Test
+  void findItems_noSearch_pageReflectsTotalCount() {
+    when(itemRepository.findAllBy(any())).thenReturn(
+        Flux.just(createItem(1L, "A", 100), createItem(2L, "B", 200)));
+    when(itemRepository.count()).thenReturn(Mono.just(20L));
+
+    StepVerifier.create(itemService.findItems(null, PageRequest.of(0, 5)))
+        .assertNext(page -> {
+          assertThat(page.getContent()).hasSize(2);
+          assertThat(page.getTotalElements()).isEqualTo(20);
+        })
+        .verifyComplete();
   }
 
   @Test
   void findById_existingItem_returnsItem() {
     Item item = createItem(1L, "Test", 100);
-    when(itemRepository.findById(1L)).thenReturn(Optional.of(item));
+    when(itemRepository.findById(1L)).thenReturn(Mono.just(item));
 
-    Item result = itemService.findById(1L);
-
-    assertThat(result.getTitle()).isEqualTo("Test");
+    StepVerifier.create(itemService.findById(1L))
+        .assertNext(result -> assertThat(result.getTitle()).isEqualTo("Test"))
+        .verifyComplete();
   }
 
   @Test
-  void findById_nonExisting_throwsException() {
-    when(itemRepository.findById(999L)).thenReturn(Optional.empty());
+  void findById_notFound_emitsError() {
+    when(itemRepository.findById(999L)).thenReturn(Mono.empty());
 
-    assertThatThrownBy(() -> itemService.findById(999L))
-        .isInstanceOf(RuntimeException.class);
+    StepVerifier.create(itemService.findById(999L))
+        .expectErrorMatches(ex ->
+            ex instanceof RuntimeException && ex.getMessage().contains("999"))
+        .verify();
   }
 
   private Item createItem(Long id, String title, long price) {

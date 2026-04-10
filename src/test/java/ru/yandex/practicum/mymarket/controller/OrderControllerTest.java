@@ -2,28 +2,31 @@ package ru.yandex.practicum.mymarket.controller;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.test.web.servlet.MockMvc;
-import ru.yandex.practicum.mymarket.entity.CustomerOrder;
-import ru.yandex.practicum.mymarket.entity.OrderItem;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.dto.ItemDto;
+import ru.yandex.practicum.mymarket.dto.OrderDto;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
-@WebMvcTest
+// No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
+@WebFluxTest
 class OrderControllerTest {
 
   @Autowired
-  MockMvc mockMvc;
+  WebTestClient webTestClient;
 
   @MockitoBean
   ItemService itemService;
@@ -35,50 +38,70 @@ class OrderControllerTest {
   OrderService orderService;
 
   @Test
-  void getOrders_returnsOrdersTemplate() throws Exception {
-    CustomerOrder order = createOrder(1L, "s1", 3000);
-    when(orderService.getOrders(any())).thenReturn(List.of(order));
+  void getOrders_rendersOrdersList() {
+    OrderDto order = new OrderDto(1L,
+        List.of(new ItemDto(10L, "Мяч", null, null, 1500, 2)),
+        3000L);
+    when(orderService.getOrders(any())).thenReturn(Flux.just(order));
 
-    mockMvc.perform(get("/orders"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("orders"))
-        .andExpect(model().attributeExists("orders"));
+    webTestClient.get().uri("/orders")
+        .exchange()
+        .expectStatus().isOk()
+        .expectBody(String.class)
+        .value(html -> assertThat(html).contains("Заказ №1"));
   }
 
   @Test
-  void getOrder_returnsOrderTemplate() throws Exception {
-    CustomerOrder order = createOrder(1L, "s1", 5000);
-    when(orderService.getOrder(1L)).thenReturn(order);
+  void getOrders_emptyList_rendersPageWithoutOrders() {
+    when(orderService.getOrders(any())).thenReturn(Flux.empty());
 
-    mockMvc.perform(get("/orders/1"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("order"))
-        .andExpect(model().attributeExists("order"))
-        .andExpect(model().attribute("newOrder", false));
+    webTestClient.get().uri("/orders")
+        .exchange()
+        .expectStatus().isOk()
+        .expectBody(String.class)
+        .value(html -> assertThat(html).doesNotContain("Заказ №"));
   }
 
   @Test
-  void getOrder_withNewOrderFlag() throws Exception {
-    CustomerOrder order = createOrder(1L, "s1", 5000);
-    when(orderService.getOrder(1L)).thenReturn(order);
+  void getOrder_rendersOrderPage() {
+    OrderDto order = new OrderDto(5L,
+        List.of(new ItemDto(10L, "Ракетка", null, null, 6100, 1)),
+        6100L);
+    when(orderService.getOrder(5L)).thenReturn(Mono.just(order));
 
-    mockMvc.perform(get("/orders/1").param("newOrder", "true"))
-        .andExpect(model().attribute("newOrder", true));
+    webTestClient.get().uri("/orders/5")
+        .exchange()
+        .expectStatus().isOk()
+        .expectBody(String.class)
+        .value(html -> {
+          assertThat(html).contains("Заказ №5");
+          assertThat(html).contains("Ракетка");
+          assertThat(html).doesNotContain("Поздравляем");
+        });
   }
 
   @Test
-  void buy_redirectsToNewOrder() throws Exception {
-    when(orderService.createOrder(any())).thenReturn(42L);
+  void getOrder_withNewOrderFlag_showsCongrats() {
+    OrderDto order = new OrderDto(7L, List.of(), 0L);
+    when(orderService.getOrder(7L)).thenReturn(Mono.just(order));
 
-    mockMvc.perform(post("/buy"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/orders/42?newOrder=true"));
+    webTestClient.get().uri("/orders/7?newOrder=true")
+        .exchange()
+        .expectStatus().isOk()
+        .expectBody(String.class)
+        .value(html -> assertThat(html).contains("Поздравляем"));
   }
 
-  private CustomerOrder createOrder(Long id, String sessionId, long totalSum) {
-    CustomerOrder order = new CustomerOrder(sessionId, totalSum);
-    ReflectionTestUtils.setField(order, "id", id);
-    order.addItem(new OrderItem(1L, "Товар", 1500, 2));
-    return order;
+  @Test
+  void buy_redirectsToNewOrder() {
+    when(orderService.createOrder(any())).thenReturn(Mono.just(42L));
+
+    webTestClient.post().uri("/buy")
+        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+        .body(BodyInserters.fromFormData("dummy", "value"))
+        .exchange()
+        .expectStatus().is3xxRedirection()
+        .expectHeader().value("Location", loc ->
+            assertThat(loc).contains("/orders/42").contains("newOrder=true"));
   }
 }

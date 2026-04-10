@@ -1,45 +1,33 @@
 package ru.yandex.practicum.mymarket.entity;
 
-import jakarta.persistence.*;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "customer_orders")
+import java.time.LocalDateTime;
+
+@Table("customer_orders")
 public class CustomerOrder {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(name = "session_id", nullable = false)
+  @Column("session_id")
   private String sessionId;
 
-  @Column(name = "total_sum", nullable = false)
+  @Column("total_sum")
   private long totalSum;
 
-  @Column(name = "created_at", nullable = false, updatable = false)
+  @CreatedDate
+  @Column("created_at")
   private LocalDateTime createdAt;
-
-  @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
-  private List<OrderItem> items = new ArrayList<>();
-
-  @PrePersist
-  void onCreate() {
-    this.createdAt = LocalDateTime.now();
-  }
 
   public CustomerOrder() {}
 
   public CustomerOrder(String sessionId, long totalSum) {
     this.sessionId = sessionId;
     this.totalSum = totalSum;
-  }
-
-  public void addItem(OrderItem orderItem) {
-    items.add(orderItem);
-    orderItem.setOrder(this);
   }
 
   public Long getId() { return id; }
@@ -51,7 +39,5 @@ public class CustomerOrder {
   public void setTotalSum(long totalSum) { this.totalSum = totalSum; }
 
   public LocalDateTime getCreatedAt() { return createdAt; }
-
-  public List<OrderItem> getItems() { return items; }
-  public void setItems(List<OrderItem> items) { this.items = items; }
+  public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

@@ -1,17 +1,17 @@
 # Витрина интернет-магазина
 
-Веб-приложение на Spring Boot — витрина товаров с корзиной и оформлением заказов.
+Реактивное веб-приложение на Spring Boot — витрина товаров с корзиной и оформлением заказов.
 
 ## Стек технологий
 
 | Категория | Технология |
 |-----------|------------|
 | Язык | Java 21 |
-| Фреймворк | Spring Boot 3.4, Spring MVC |
-| Шаблонизатор | Thymeleaf |
-| ORM | Spring Data JPA, Hibernate |
+| Фреймворк | Spring Boot 3.4, Spring WebFlux |
+| Шаблонизатор | Thymeleaf (reactive) |
+| Доступ к данным | Spring Data R2DBC |
 | База данных | PostgreSQL 17 (prod), H2 (тесты) |
-| Тесты | JUnit 5, Mockito, MockMvc, AssertJ |
+| Тесты | JUnit 5, Mockito, StepVerifier, WebTestClient, AssertJ |
 | Сборка | Maven |
 | Контейнеризация | Docker, Docker Compose |
 
@@ -70,18 +70,18 @@ java -jar target/my-market-app-0.0.1-SNAPSHOT.jar
 ./mvnw test
 ```
 
-55 тестов: unit (Mockito), @DataJpaTest, @WebMvcTest, @SpringBootTest.
+62 теста: unit (Mockito + StepVerifier), @DataR2dbcTest, @WebFluxTest, @SpringBootTest.
 
 ## Структура проекта
 
 ```
 src/main/java/ru/yandex/practicum/mymarket/
-├── entity/          — JPA-сущности (Item, CartItem, CustomerOrder, OrderItem)
+├── entity/          — R2DBC-сущности (Item, CartItem, CustomerOrder, OrderItem)
 ├── dto/             — DTO и перечисления (ItemDto, OrderDto, PagingDto, SortType, CartAction)
-├── repository/      — Spring Data JPA репозитории
+├── repository/      — Spring Data R2DBC репозитории
 ├── service/         — бизнес-логика (ItemService, CartService, OrderService)
-├── controller/      — Spring MVC контроллеры
-└── config/          — DataInitializer (загрузка тестовых данных)
+├── controller/      — Spring WebFlux контроллеры
+└── config/          — R2dbcConfig, DataInitializer
 ```
 
 ## Эндпоинты

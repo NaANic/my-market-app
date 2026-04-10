@@ -1,31 +1,28 @@
 package ru.yandex.practicum.mymarket.entity;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "cart_items",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"session_id", "item_id"}))
+@Table("cart_items")
 public class CartItem {
 
   @Id
-  @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(name = "session_id", nullable = false)
+  @Column("session_id")
   private String sessionId;
 
-  @ManyToOne(optional = false)
-  @JoinColumn(name = "item_id", nullable = false)
-  private Item item;
+  @Column("item_id")
+  private Long itemId;
 
-  @Column(nullable = false)
   private int count = 1;
 
   public CartItem() {}
 
-  public CartItem(String sessionId, Item item, int count) {
+  public CartItem(String sessionId, Long itemId, int count) {
     this.sessionId = sessionId;
-    this.item = item;
+    this.itemId = itemId;
     this.count = count;
   }
 
@@ -34,8 +31,8 @@ public class CartItem {
   public String getSessionId() { return sessionId; }
   public void setSessionId(String sessionId) { this.sessionId = sessionId; }
 
-  public Item getItem() { return item; }
-  public void setItem(Item item) { this.item = item; }
+  public Long getItemId() { return itemId; }
+  public void setItemId(Long itemId) { this.itemId = itemId; }
 
   public int getCount() { return count; }
   public void setCount(int count) { this.count = count; }
