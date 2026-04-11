@@ -14,6 +14,7 @@ import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
+import ru.yandex.practicum.mymarket.service.PaymentClientService;
 
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,17 @@ class ItemControllerTest {
 
   @MockitoBean
   OrderService orderService;
+
+  /**
+   * CartController now depends on PaymentClientService. All @WebFluxTest
+   * classes share the same application context (no controller filter is set),
+   * so every test class in this package must declare this bean or the shared
+   * context cannot be wired and ALL controller tests fail.
+   * ItemControllerTest tests don't call any cart page routes, so no stub is
+   * needed — Mockito's default (returns null / empty for reactive types) is fine.
+   */
+  @MockitoBean
+  PaymentClientService paymentClientService;
 
   @Test
   void getItems_returnsItemsPage() {
@@ -88,7 +100,6 @@ class ItemControllerTest {
         .value(html -> {
           assertThat(html).contains("Альфа");
           assertThat(html).contains("Бета");
-          // Third cell in the row is a dummy placeholder
           assertThat(html).contains("&nbsp;");
         });
   }
@@ -110,8 +121,6 @@ class ItemControllerTest {
     when(cartService.handleAction(any(), eq(1L), eq(CartAction.PLUS)))
         .thenReturn(Mono.empty());
 
-    // Query string — @RequestParam reads from both query string and form body;
-    // using query string avoids form-body decoding differences in the @WebFluxTest mock context.
     webTestClient.post().uri("/items?id=1&action=PLUS&sort=ALPHA&pageNumber=2&pageSize=10")
         .exchange()
         .expectStatus().is3xxRedirection()

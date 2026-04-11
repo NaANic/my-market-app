@@ -14,6 +14,7 @@ import ru.yandex.practicum.mymarket.dto.OrderDto;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
+import ru.yandex.practicum.mymarket.service.PaymentClientService;
 
 import java.util.List;
 
@@ -36,6 +37,15 @@ class OrderControllerTest {
 
   @MockitoBean
   OrderService orderService;
+
+  /**
+   * CartController now depends on PaymentClientService. All @WebFluxTest
+   * classes share the same application context, so every class in this
+   * package must declare this bean or the shared context fails to wire.
+   * OrderControllerTest tests don't hit cart page routes, so no stub needed.
+   */
+  @MockitoBean
+  PaymentClientService paymentClientService;
 
   @Test
   void getOrders_rendersOrdersList() {
