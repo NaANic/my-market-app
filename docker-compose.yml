@@ -1,59 +1,73 @@
+version: '3.8'
+
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: market-db
+    environment:
+      POSTGRES_DB: shopfront
+      POSTGRES_USER: shopfront
+      POSTGRES_PASSWORD: shopfront
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopfront -d shopfront"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: market-redis
-    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 5
 
   payment-service:
     build:
-      context: ./payment-service
-      dockerfile: Dockerfile
-    image: market/payment-service:latest
+      context: .
+      dockerfile: payment-service/Dockerfile
     container_name: market-payment
     restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
-      SERVER_PORT: 8081
-      # Initial balance in kopecks (1 000 000 коп. = 10 000 руб.)
       PAYMENT_INITIAL_BALANCE: ${PAYMENT_INITIAL_BALANCE:-1000000}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep UP || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 20s
 
   market-app:
     build:
-      context: ./market-app
-      dockerfile: Dockerfile
-    image: market/market-app:latest
+      context: .
+      dockerfile: market-app/Dockerfile
     container_name: market-app
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      SERVER_PORT: 8080
-      SPRING_DATA_REDIS_URL: redis://market-redis:6379
-      # Points at the payment-service container by Docker service name
-      PAYMENT_SERVICE_URL: http://market-payment:8081
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/shopfront
+      SPRING_R2DBC_USERNAME: shopfront
+      SPRING_R2DBC_PASSWORD: shopfront
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      PAYMENT_SERVICE_URL: http://payment-service:8081
     depends_on:
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       payment-service:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+
+volumes:
+  postgres_data:
+

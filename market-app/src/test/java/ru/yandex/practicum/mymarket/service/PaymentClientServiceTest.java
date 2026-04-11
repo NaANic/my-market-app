@@ -7,8 +7,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import ru.yandex.practicum.mymarket.exception.PaymentFailedException;
-import ru.yandex.practicum.payment.client.api.BalanceApi;
 import ru.yandex.practicum.payment.client.api.PaymentApi;
 import ru.yandex.practicum.payment.client.model.BalanceResponse;
 import ru.yandex.practicum.payment.client.model.PaymentRequest;
@@ -25,23 +23,29 @@ class PaymentClientServiceTest {
   @Mock
   PaymentApi paymentApi;
 
-  @Mock
-  BalanceApi balanceApi;
-
   @InjectMocks
   PaymentClientService paymentClientService;
 
+  // -----------------------------------------------------------------------
+  // getBalance
+  // -----------------------------------------------------------------------
+
   @Test
   void getBalance_returnsBalanceFromApi() {
-    when(balanceApi.getBalance())
+    // Both getBalance and processPayment live on the single generated PaymentApi.
+    when(paymentApi.getBalance())
         .thenReturn(Mono.just(new BalanceResponse().balance(75_000L)));
 
     StepVerifier.create(paymentClientService.getBalance())
         .assertNext(balance -> assertThat(balance).isEqualTo(75_000L))
         .verifyComplete();
 
-    verify(balanceApi).getBalance();
+    verify(paymentApi).getBalance();
   }
+
+  // -----------------------------------------------------------------------
+  // pay — success
+  // -----------------------------------------------------------------------
 
   @Test
   void pay_success_returnsRemainingBalance() {
@@ -56,6 +60,10 @@ class PaymentClientServiceTest {
 
     verify(paymentApi).processPayment(any(PaymentRequest.class));
   }
+
+  // -----------------------------------------------------------------------
+  // pay — error propagation
+  // -----------------------------------------------------------------------
 
   @Test
   void pay_propagatesErrorFromApi() {

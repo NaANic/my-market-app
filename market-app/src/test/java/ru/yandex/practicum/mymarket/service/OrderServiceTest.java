@@ -1,5 +1,6 @@
 package ru.yandex.practicum.mymarket.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,19 +48,60 @@ class OrderServiceTest {
   @InjectMocks
   OrderService orderService;
 
-  // ---------------------------------------------------------------------------
+  /**
+   * Provide a non-null default for {@code saveAll} on every test.
+   *
+   * <p>Even in the 402-failure path, {@code OrderService.createOrder()} wires
+   * {@code orderItemRepository.saveAll(...)} into the reactive chain at
+   * <em>assembly time</em> (before any signals flow). Mockito returns {@code null}
+   * by default for unstubbed methods, and calling {@code .then()} on a {@code null}
+   * {@code Flux} throws an NPE before the {@code onErrorMap} can re-route the error.
+   *
+   * <p>{@code lenient()} suppresses the "unnecessary stubbing" strict-mode warning
+   * for tests where {@code saveAll} is never actually subscribed to (payment-failure
+   * tests). Success-path tests override this stub with a plain {@code when()} call.
+   */
+  @BeforeEach
+  void stubSaveAll() {
+    lenient().when(orderItemRepository.saveAll(any(Publisher.class)))
+        .thenReturn(Flux.empty());
+  }
+
+  // -----------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------
+
+  /**
+   * Builds a base {@link WebClientResponseException} with status 402.
+   * The generated {@code java/webclient} client throws the base exception
+   * class — NOT the {@code WebClientResponseException.PaymentRequired} subclass —
+   * so tests must use this factory and rely on the status-code predicate in
+   * {@code OrderService}.
+   */
+  private static WebClientResponseException make402(byte[] body) {
+    return WebClientResponseException.create(
+        HttpStatus.PAYMENT_REQUIRED.value(),
+        "Payment Required",
+        HttpHeaders.EMPTY,
+        body,
+        StandardCharsets.UTF_8);
+  }
+
+  private static CustomerOrder orderWithId(CustomerOrder order, long id) {
+    ReflectionTestUtils.setField(order, "id", id);
+    return order;
+  }
+
+  // -----------------------------------------------------------------------
   // createOrder — success path
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   @Test
   void createOrder_success_savesOrderAndClearsCart() {
     ItemDto itemDto = new ItemDto(1L, "Товар", "Desc", "/img.jpg", 1500, 3);
     when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(itemDto));
-    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv -> {
-      CustomerOrder order = inv.getArgument(0);
-      ReflectionTestUtils.setField(order, "id", 42L);
-      return Mono.just(order);
-    });
+    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
+        Mono.just(orderWithId(inv.getArgument(0), 42L)));
     when(paymentClientService.pay(42L, 4500L)).thenReturn(Mono.just(95_500L));
     when(orderItemRepository.saveAll(any(Publisher.class))).thenReturn(Flux.empty());
     when(cartService.clearCart("s1")).thenReturn(Mono.empty());
@@ -69,6 +112,7 @@ class OrderServiceTest {
 
     verify(orderRepository).save(any(CustomerOrder.class));
     verify(paymentClientService).pay(42L, 4500L);
+    verify(orderItemRepository).saveAll(any(Publisher.class));
     verify(cartService).clearCart("s1");
   }
 
@@ -79,13 +123,9 @@ class OrderServiceTest {
         new ItemDto(1L, "A", null, null, 1000, 2),
         new ItemDto(2L, "B", null, null, 500, 3)
     ));
-    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv -> {
-      CustomerOrder order = inv.getArgument(0);
-      ReflectionTestUtils.setField(order, "id", 1L);
-      return Mono.just(order);
-    });
+    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
+        Mono.just(orderWithId(inv.getArgument(0), 1L)));
     when(paymentClientService.pay(1L, 3500L)).thenReturn(Mono.just(96_500L));
-    when(orderItemRepository.saveAll(any(Publisher.class))).thenReturn(Flux.empty());
     when(cartService.clearCart("s1")).thenReturn(Mono.empty());
 
     StepVerifier.create(orderService.createOrder("s1"))
@@ -95,9 +135,9 @@ class OrderServiceTest {
     verify(paymentClientService).pay(1L, 3500L);
   }
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // createOrder — empty cart
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   @Test
   void createOrder_emptyCart_emitsError() {
@@ -111,34 +151,21 @@ class OrderServiceTest {
     verify(paymentClientService, never()).pay(any(Long.class), any(Long.class));
   }
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // createOrder — payment failure (402)
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   @Test
   void createOrder_paymentRequired_emitsPaymentFailedException() {
     ItemDto itemDto = new ItemDto(1L, "Товар", "Desc", "/img.jpg", 2000, 1);
     when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(itemDto));
-    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv -> {
-      CustomerOrder order = inv.getArgument(0);
-      ReflectionTestUtils.setField(order, "id", 7L);
-      return Mono.just(order);
-    });
+    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
+        Mono.just(orderWithId(inv.getArgument(0), 7L)));
 
-    // Simulate HTTP 402 with a JSON body matching payment-service response format
     byte[] body = "{\"message\":\"Insufficient funds\",\"balance\":500}"
         .getBytes(StandardCharsets.UTF_8);
-    WebClientResponseException.PaymentRequired paymentRequired =
-        (WebClientResponseException.PaymentRequired)
-            WebClientResponseException.create(
-                HttpStatus.PAYMENT_REQUIRED.value(),
-                "Payment Required",
-                HttpHeaders.EMPTY,
-                body,
-                StandardCharsets.UTF_8);
-
     when(paymentClientService.pay(7L, 2000L))
-        .thenReturn(Mono.error(paymentRequired));
+        .thenReturn(Mono.error(make402(body)));
 
     StepVerifier.create(orderService.createOrder("s1"))
         .expectErrorMatches(ex ->
@@ -147,7 +174,7 @@ class OrderServiceTest {
                 && pfe.getCurrentBalance() == 500L)
         .verify();
 
-    // Order items must NOT be saved and cart must NOT be cleared on failure
+    // Critical: neither order items nor cart must be touched on payment failure
     verify(orderItemRepository, never()).saveAll(any(Publisher.class));
     verify(cartService, never()).clearCart(any());
   }
@@ -156,41 +183,30 @@ class OrderServiceTest {
   void createOrder_paymentRequired_malformedBody_balanceFallsBackToMinusOne() {
     ItemDto itemDto = new ItemDto(1L, "Товар", null, null, 1000, 1);
     when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(itemDto));
-    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv -> {
-      CustomerOrder order = inv.getArgument(0);
-      ReflectionTestUtils.setField(order, "id", 8L);
-      return Mono.just(order);
-    });
+    when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
+        Mono.just(orderWithId(inv.getArgument(0), 8L)));
 
-    // Malformed body — balance extraction should fall back to -1
-    byte[] body = "not json".getBytes(StandardCharsets.UTF_8);
-    WebClientResponseException.PaymentRequired paymentRequired =
-        (WebClientResponseException.PaymentRequired)
-            WebClientResponseException.create(
-                HttpStatus.PAYMENT_REQUIRED.value(),
-                "Payment Required",
-                HttpHeaders.EMPTY,
-                body,
-                StandardCharsets.UTF_8);
-
+    byte[] malformed = "not json".getBytes(StandardCharsets.UTF_8);
     when(paymentClientService.pay(8L, 1000L))
-        .thenReturn(Mono.error(paymentRequired));
+        .thenReturn(Mono.error(make402(malformed)));
 
     StepVerifier.create(orderService.createOrder("s1"))
         .expectErrorMatches(ex ->
             ex instanceof PaymentFailedException pfe
                 && pfe.getCurrentBalance() == -1L)
         .verify();
+
+    verify(orderItemRepository, never()).saveAll(any(Publisher.class));
+    verify(cartService, never()).clearCart(any());
   }
 
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   // getOrders / getOrder
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------------------------------
 
   @Test
   void getOrders_returnsOrderDtos() {
-    CustomerOrder order = new CustomerOrder("s1", 3000);
-    ReflectionTestUtils.setField(order, "id", 1L);
+    CustomerOrder order = orderWithId(new CustomerOrder("s1", 3000), 1L);
     OrderItem orderItem = new OrderItem(1L, 10L, "Товар А", 1500, 2);
 
     when(orderRepository.findBySessionIdOrderByCreatedAtDesc("s1"))
@@ -210,8 +226,7 @@ class OrderServiceTest {
 
   @Test
   void getOrder_existing_returnsOrderDto() {
-    CustomerOrder order = new CustomerOrder("s1", 5000);
-    ReflectionTestUtils.setField(order, "id", 7L);
+    CustomerOrder order = orderWithId(new CustomerOrder("s1", 5000), 7L);
     OrderItem orderItem = new OrderItem(7L, 20L, "Ракетка", 5000, 1);
 
     when(orderRepository.findById(7L)).thenReturn(Mono.just(order));
