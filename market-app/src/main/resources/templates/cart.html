@@ -17,6 +17,14 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>
 
+<!-- Insufficient funds / payment service unavailable alert — shown proactively -->
+<div class="alert alert-warning m-2" role="alert"
+     th:if="${!items.isEmpty() and !canAfford}">
+    <i class="bi bi-wallet2 me-2"></i>
+    Недостаточно средств для оплаты заказа или сервис оплаты недоступен.
+    Пополните баланс или попробуйте позже.
+</div>
+
 <div class="container p-2">
     <div class="row p-2">
         <div class="col">
@@ -57,7 +65,20 @@
             <form action="/buy" method="post" th:if="${!items.isEmpty()}">
                 <div class="hstack gap-3">
                     <h2 th:text="'Итого: '+${total}+' руб.'"/>
-                    <button class="btn btn-warning ms-auto">Купить</button>
+                    <!--
+                        th:disabled disables the button when the balance is insufficient
+                        or the payment service is unavailable (canAfford = false).
+                        th:title provides a tooltip explaining the reason to the user.
+                        Bootstrap's "disabled" attribute also suppresses form submission,
+                        but the server-side check in OrderService remains the authoritative guard.
+                    -->
+                    <button class="btn btn-warning ms-auto"
+                            th:disabled="${!canAfford}"
+                            th:title="${canAfford}
+                                    ? 'Оформить заказ'
+                                    : 'Недостаточно средств или сервис оплаты недоступен'">
+                        Купить
+                    </button>
                 </div>
             </form>
         </div>
