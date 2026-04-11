@@ -20,6 +20,12 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
+        <!-- Exposes /actuator/health — required by the Docker Compose healthcheck -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- Validation annotations used in generated OpenAPI models -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

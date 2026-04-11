@@ -2,6 +2,7 @@ package ru.yandex.practicum.mymarket.service;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -25,13 +26,13 @@ public class ItemService {
   private final ItemRepository itemRepository;
   private final ReactiveRedisTemplate<String, Item>   itemCache;
   private final ReactiveRedisTemplate<String, String> stringCache;
-  private final ObjectMapper  objectMapper;
-  private final Duration      cacheTtl;
+  private final ObjectMapper objectMapper;
+  private final Duration     cacheTtl;
 
   public ItemService(
       ItemRepository itemRepository,
-      ReactiveRedisTemplate<String, Item>   itemCache,
-      ReactiveRedisTemplate<String, String> stringCache,
+      @Qualifier("itemCache")   ReactiveRedisTemplate<String, Item>   itemCache,
+      @Qualifier("stringCache") ReactiveRedisTemplate<String, String> stringCache,
       ObjectMapper objectMapper,
       @Value("${cache.item.ttl-minutes:5}") long ttlMinutes) {
     this.itemRepository = itemRepository;
@@ -41,9 +42,9 @@ public class ItemService {
     this.cacheTtl       = Duration.ofMinutes(ttlMinutes);
   }
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Public API
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
 
   /**
    * Returns a page of items. Checks the Redis page-cache first; on a miss
@@ -52,36 +53,34 @@ public class ItemService {
   public Mono<Page<Item>> findItems(String search, Pageable pageable) {
     String key = pageKey(search, pageable);
     return stringCache.opsForValue().get(key)
-        .onErrorResume(e -> Mono.empty())              // Redis down → DB fallback
+        .onErrorResume(e -> Mono.empty())
         .flatMap(json -> deserializePage(json, pageable))
-        // Mono.defer ensures fetchFromDb is only called when the cache is empty
         .switchIfEmpty(Mono.defer(() -> fetchFromDb(search, pageable)
             .flatMap(page -> cachePage(key, page))));
   }
 
   /**
-   * Returns a single item by ID. Checks the Redis item-cache first; on a miss
-   * fetches from the DB, writes to Redis, and returns the item.
+   * Returns a single item by ID. Checks the Redis item-cache first; on a
+   * miss fetches from the DB, writes to Redis, and returns the item.
    *
    * @throws EntityNotFoundException if no item with the given ID exists
    */
   public Mono<Item> findById(long id) {
     String key = ITEM_KEY_PREFIX + id;
     return itemCache.opsForValue().get(key)
-        .onErrorResume(e -> Mono.empty())              // Redis down → DB fallback
-        // Mono.defer ensures the DB is only queried when the cache is empty
+        .onErrorResume(e -> Mono.empty())
         .switchIfEmpty(Mono.defer(() ->
             itemRepository.findById(id)
                 .switchIfEmpty(Mono.error(new EntityNotFoundException("Товар", id)))
                 .flatMap(item -> itemCache.opsForValue()
                     .set(key, item, cacheTtl)
-                    .onErrorReturn(false)              // write failure → still return item
+                    .onErrorReturn(false)
                     .thenReturn(item))));
   }
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Private helpers
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
 
   private Mono<Page<Item>> fetchFromDb(String search, Pageable pageable) {
     if (search != null && !search.isBlank()) {
@@ -103,7 +102,7 @@ public class ItemService {
                 new CachedPage(page.getContent(), page.getTotalElements())))
         .flatMap(json -> stringCache.opsForValue().set(key, json, cacheTtl))
         .thenReturn(page)
-        .onErrorReturn(page);  // serialisation or Redis write failure → return page as-is
+        .onErrorReturn(page);
   }
 
   @SuppressWarnings("unchecked")
@@ -111,10 +110,9 @@ public class ItemService {
     return Mono.fromCallable(() -> {
       CachedPage cached = objectMapper.readValue(json, CachedPage.class);
       return (Page<Item>) new PageImpl<>(cached.items(), pageable, cached.total());
-    }).onErrorResume(e -> Mono.empty());  // deserialisation failure → treat as cache miss
+    }).onErrorResume(e -> Mono.empty());
   }
 
-  /** Composite cache key encoding every parameter that affects the result set. */
   private String pageKey(String search, Pageable pageable) {
     String q = (search != null && !search.isBlank()) ? search.trim() : "";
     String sort = pageable.getSort().stream()
@@ -124,9 +122,8 @@ public class ItemService {
         PAGE_KEY_PREFIX, q, pageable.getPageNumber(), pageable.getPageSize(), sort);
   }
 
-  /** Internal DTO for serialising a page result to/from Redis. */
   private record CachedPage(
       @JsonProperty("items") List<Item> items,
-      @JsonProperty("total")  long total) {
+      @JsonProperty("total") long total) {
   }
 }
