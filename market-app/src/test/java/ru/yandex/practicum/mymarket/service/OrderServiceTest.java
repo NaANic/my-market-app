@@ -6,7 +6,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.reactivestreams.Publisher;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -22,9 +21,11 @@ import ru.yandex.practicum.mymarket.repository.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repository.OrderRepository;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,19 +52,19 @@ class OrderServiceTest {
   /**
    * Provide a non-null default for {@code saveAll} on every test.
    *
-   * <p>Even in the 402-failure path, {@code OrderService.createOrder()} wires
-   * {@code orderItemRepository.saveAll(...)} into the reactive chain at
-   * <em>assembly time</em> (before any signals flow). Mockito returns {@code null}
-   * by default for unstubbed methods, and calling {@code .then()} on a {@code null}
-   * {@code Flux} throws an NPE before the {@code onErrorMap} can re-route the error.
+   * <p>{@code OrderService} now calls {@code orderItemRepository.saveAll(List)}
+   * (not {@code saveAll(Publisher)}), wrapped in {@code Mono.defer} so it is
+   * only invoked on subscription. Nevertheless a lenient stub is still required
+   * because MockitoExtension strict mode would fail any test that sets up a stub
+   * that is never exercised — which is exactly the case for the 402 failure tests
+   * where {@code saveAll} must NOT be called.
    *
-   * <p>{@code lenient()} suppresses the "unnecessary stubbing" strict-mode warning
-   * for tests where {@code saveAll} is never actually subscribed to (payment-failure
-   * tests). Success-path tests override this stub with a plain {@code when()} call.
+   * <p>{@code anyList()} matches the concrete {@code List<OrderItem>} argument
+   * that {@code saveOrderItems()} constructs.
    */
   @BeforeEach
   void stubSaveAll() {
-    lenient().when(orderItemRepository.saveAll(any(Publisher.class)))
+    lenient().when(orderItemRepository.saveAll(anyList()))
         .thenReturn(Flux.empty());
   }
 
@@ -72,11 +73,10 @@ class OrderServiceTest {
   // -----------------------------------------------------------------------
 
   /**
-   * Builds a base {@link WebClientResponseException} with status 402.
-   * The generated {@code java/webclient} client throws the base exception
-   * class — NOT the {@code WebClientResponseException.PaymentRequired} subclass —
-   * so tests must use this factory and rely on the status-code predicate in
-   * {@code OrderService}.
+   * Builds a plain {@link WebClientResponseException} with status 402.
+   * The generated {@code java/webclient} client throws the base class, not
+   * the {@code PaymentRequired} subclass, so tests use this factory method
+   * and rely on the status-code predicate in {@code OrderService}.
    */
   private static WebClientResponseException make402(byte[] body) {
     return WebClientResponseException.create(
@@ -103,7 +103,7 @@ class OrderServiceTest {
     when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
         Mono.just(orderWithId(inv.getArgument(0), 42L)));
     when(paymentClientService.pay(42L, 4500L)).thenReturn(Mono.just(95_500L));
-    when(orderItemRepository.saveAll(any(Publisher.class))).thenReturn(Flux.empty());
+    when(orderItemRepository.saveAll(anyList())).thenReturn(Flux.empty());
     when(cartService.clearCart("s1")).thenReturn(Mono.empty());
 
     StepVerifier.create(orderService.createOrder("s1"))
@@ -112,7 +112,7 @@ class OrderServiceTest {
 
     verify(orderRepository).save(any(CustomerOrder.class));
     verify(paymentClientService).pay(42L, 4500L);
-    verify(orderItemRepository).saveAll(any(Publisher.class));
+    verify(orderItemRepository).saveAll(anyList());
     verify(cartService).clearCart("s1");
   }
 
@@ -174,8 +174,8 @@ class OrderServiceTest {
                 && pfe.getCurrentBalance() == 500L)
         .verify();
 
-    // Critical: neither order items nor cart must be touched on payment failure
-    verify(orderItemRepository, never()).saveAll(any(Publisher.class));
+    // saveAll and clearCart must never be reached on payment failure
+    verify(orderItemRepository, never()).saveAll(anyList());
     verify(cartService, never()).clearCart(any());
   }
 
@@ -196,7 +196,7 @@ class OrderServiceTest {
                 && pfe.getCurrentBalance() == -1L)
         .verify();
 
-    verify(orderItemRepository, never()).saveAll(any(Publisher.class));
+    verify(orderItemRepository, never()).saveAll(anyList());
     verify(cartService, never()).clearCart(any());
   }
 

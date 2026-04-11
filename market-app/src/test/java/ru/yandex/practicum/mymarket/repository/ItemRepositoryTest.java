@@ -10,6 +10,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.config.R2dbcConfig;
+import ru.yandex.practicum.mymarket.config.TestDataR2dbcConfig;
 import ru.yandex.practicum.mymarket.entity.Item;
 
 import java.util.List;
@@ -17,7 +18,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataR2dbcTest
-@Import(R2dbcConfig.class)
+@Import({R2dbcConfig.class, TestDataR2dbcConfig.class})
 @ActiveProfiles("test")
 class ItemRepositoryTest {
 
@@ -76,7 +77,7 @@ class ItemRepositoryTest {
   @Test
   void findAllBy_sortByPrice_ascending() {
     StepVerifier.create(itemRepository.findAllBy(
-        PageRequest.of(0, 10, Sort.by("price"))).collectList())
+            PageRequest.of(0, 10, Sort.by("price"))).collectList())
         .assertNext(items -> {
           assertThat(items.get(0).getPrice()).isEqualTo(2500);
           assertThat(items.get(2).getPrice()).isEqualTo(7900);
@@ -87,7 +88,7 @@ class ItemRepositoryTest {
   @Test
   void findAllBy_sortByTitle_alphabetical() {
     StepVerifier.create(itemRepository.findAllBy(
-        PageRequest.of(0, 10, Sort.by("title"))).collectList())
+            PageRequest.of(0, 10, Sort.by("title"))).collectList())
         .assertNext(items -> {
           List<String> titles = items.stream().map(Item::getTitle).toList();
           assertThat(titles).isSorted();

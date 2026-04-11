@@ -8,21 +8,21 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.config.R2dbcConfig;
+import ru.yandex.practicum.mymarket.config.TestDataR2dbcConfig;
 import ru.yandex.practicum.mymarket.entity.CartItem;
 import ru.yandex.practicum.mymarket.entity.Item;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataR2dbcTest
-@Import(R2dbcConfig.class)
+@Import({R2dbcConfig.class, TestDataR2dbcConfig.class})
 @ActiveProfiles("test")
 class CartItemRepositoryTest {
 
-  @Autowired
-  CartItemRepository cartItemRepository;
-
-  @Autowired
-  ItemRepository itemRepository;
+  @Autowired CartItemRepository cartItemRepository;
+  @Autowired ItemRepository itemRepository;
 
   private Item item1, item2;
 
@@ -39,7 +39,7 @@ class CartItemRepositoryTest {
 
   @Test
   void findBySessionId_returnsOnlyThisSession() {
-    cartItemRepository.saveAll(java.util.List.of(
+    cartItemRepository.saveAll(List.of(
         new CartItem("session-1", item1.getId(), 2),
         new CartItem("session-1", item2.getId(), 1),
         new CartItem("session-2", item1.getId(), 3)
@@ -67,7 +67,7 @@ class CartItemRepositoryTest {
     cartItemRepository.save(new CartItem("session-1", item1.getId(), 5)).block();
 
     StepVerifier.create(
-        cartItemRepository.findBySessionIdAndItemId("session-1", item1.getId()))
+            cartItemRepository.findBySessionIdAndItemId("session-1", item1.getId()))
         .assertNext(ci -> assertThat(ci.getCount()).isEqualTo(5))
         .verifyComplete();
   }
@@ -77,13 +77,13 @@ class CartItemRepositoryTest {
     cartItemRepository.save(new CartItem("session-1", item1.getId(), 5)).block();
 
     StepVerifier.create(
-        cartItemRepository.findBySessionIdAndItemId("session-2", item1.getId()))
-        .verifyComplete(); // Mono.empty() — no items
+            cartItemRepository.findBySessionIdAndItemId("session-2", item1.getId()))
+        .verifyComplete();
   }
 
   @Test
   void deleteBySessionId_removesOnlyTargetSession() {
-    cartItemRepository.saveAll(java.util.List.of(
+    cartItemRepository.saveAll(List.of(
         new CartItem("session-1", item1.getId(), 1),
         new CartItem("session-1", item2.getId(), 1),
         new CartItem("session-2", item1.getId(), 1)

@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.config.R2dbcConfig;
+import ru.yandex.practicum.mymarket.config.TestDataR2dbcConfig;
 import ru.yandex.practicum.mymarket.entity.CustomerOrder;
 import ru.yandex.practicum.mymarket.entity.OrderItem;
 
@@ -16,15 +17,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataR2dbcTest
-@Import(R2dbcConfig.class)
+@Import({R2dbcConfig.class, TestDataR2dbcConfig.class})
 @ActiveProfiles("test")
 class OrderRepositoryTest {
 
-  @Autowired
-  OrderRepository orderRepository;
-
-  @Autowired
-  OrderItemRepository orderItemRepository;
+  @Autowired OrderRepository orderRepository;
+  @Autowired OrderItemRepository orderItemRepository;
 
   @BeforeEach
   void setUp() {
@@ -67,19 +65,15 @@ class OrderRepositoryTest {
 
   @Test
   void findBySessionIdOrderByCreatedAtDesc_orderedCorrectly() {
-    // Save two orders — createdAt is set by @CreatedDate auditing
     CustomerOrder order1 = orderRepository.save(new CustomerOrder("s1", 1000)).block();
     assert order1 != null;
     CustomerOrder order2 = orderRepository.save(new CustomerOrder("s1", 2000)).block();
     assert order2 != null;
 
-    // Insert a small delay to ensure different timestamps
     try { Thread.sleep(50); } catch (InterruptedException ignored) {}
 
-    // Force different timestamps: update order2's createdAt to be later
-    // Since both are created almost simultaneously, we verify only count and session
     StepVerifier.create(
-        orderRepository.findBySessionIdOrderByCreatedAtDesc("s1").collectList())
+            orderRepository.findBySessionIdOrderByCreatedAtDesc("s1").collectList())
         .assertNext(orders -> {
           assertThat(orders).hasSize(2);
           assertThat(orders).allMatch(o -> o.getSessionId().equals("s1"));
@@ -92,7 +86,7 @@ class OrderRepositoryTest {
     orderRepository.save(new CustomerOrder("s1", 1000)).block();
 
     StepVerifier.create(
-        orderRepository.findBySessionIdOrderByCreatedAtDesc("s2").collectList())
+            orderRepository.findBySessionIdOrderByCreatedAtDesc("s2").collectList())
         .assertNext(orders -> assertThat(orders).isEmpty())
         .verifyComplete();
   }
