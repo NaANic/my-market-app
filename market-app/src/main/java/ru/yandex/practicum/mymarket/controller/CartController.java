@@ -18,8 +18,22 @@ public class CartController {
     this.cartService = cartService;
   }
 
+  /**
+   * Renders the cart page.
+   *
+   * @param error optional payment-failure message forwarded from
+   *              {@link ru.yandex.practicum.mymarket.web.GlobalExceptionHandler}
+   *              via a {@code ?error=} redirect query parameter
+   */
   @GetMapping("/items")
-  public Mono<String> cart(WebSession session, Model model) {
+  public Mono<String> cart(
+      @RequestParam(required = false) String error,
+      WebSession session,
+      Model model
+  ) {
+    if (error != null && !error.isBlank()) {
+      model.addAttribute("error", error);
+    }
     return populateCartModel(session.getId(), model).thenReturn("cart");
   }
 
