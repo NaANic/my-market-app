@@ -19,3 +19,7 @@ spring:
 cache:
   item:
     ttl-minutes: 5
+
+payment:
+  service:
+    url: http://localhost:8081
