@@ -1,5 +1,6 @@
 package ru.yandex.practicum.mymarket.web;
 
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -7,15 +8,14 @@ import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
 /**
- * Starts the WebSession for every incoming request so that controllers do not
- * have to call {@code session.start()} individually.
+ * Starts the WebSession eagerly for every request so controllers can call
+ * session.getId() without needing to call session.start() themselves.
  *
- * After registering this filter you can remove every {@code session.start()}
- * call from {@link ru.yandex.practicum.mymarket.controller.CartController},
- * {@link ru.yandex.practicum.mymarket.controller.ItemController}, and
- * {@link ru.yandex.practicum.mymarket.controller.OrderController}.
+ * Runs at @Order(1) — after WebConfig.formWebFilter at @Order(-1) — so
+ * form data is already decoded and cached before session handling begins.
  */
 @Component
+@Order(1)
 public class SessionWebFilter implements WebFilter {
 
   @Override
