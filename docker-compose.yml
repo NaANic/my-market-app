@@ -1,8 +1,7 @@
 services:
-
   db:
-    image: postgres:17-alpine
-    restart: unless-stopped
+    image: postgres:16-alpine
+    container_name: market-db
     environment:
       POSTGRES_DB: shopfront
       POSTGRES_USER: shopfront
@@ -10,26 +9,64 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U shopfront -d shopfront"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  app:
-    build: .
+  redis:
+    image: redis:7-alpine
+    container_name: market-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    container_name: market-payment
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      PAYMENT_INITIAL_BALANCE: ${PAYMENT_INITIAL_BALANCE:-1000000}
+    healthcheck:
+      # curl is not present in eclipse-temurin:21-jre-alpine; wget is.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep -q UP || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  market-app:
+    build:
+      context: .
+      dockerfile: market-app/Dockerfile
+    container_name: market-app
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/shopfront
-      SPRING_DATASOURCE_USERNAME: shopfront
-      SPRING_DATASOURCE_PASSWORD: shopfront
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_R2DBC_URL: r2dbc:postgresql://db:5432/shopfront
+      SPRING_R2DBC_USERNAME: shopfront
+      SPRING_R2DBC_PASSWORD: shopfront
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      PAYMENT_SERVICE_URL: http://payment-service:8081
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
 
 volumes:
-  pgdata:
+  postgres_data:

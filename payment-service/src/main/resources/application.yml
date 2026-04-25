@@ -1,0 +1,5 @@
+server:
+  port: 8081
+
+payment:
+  initial-balance: 100000  # 1000 rubles in kopecks
