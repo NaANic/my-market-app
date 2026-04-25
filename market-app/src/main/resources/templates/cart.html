@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
-
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="utf-8">
     <title>Витрина магазина</title>
@@ -33,6 +33,10 @@
                     <span class="badge text-bg-success">Витрина магазина</span>
                 </h2>
                 <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
+                <form th:action="@{/logout}" method="post" class="d-inline">
+                    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                    <button type="submit" class="btn btn-outline-secondary bi bi-box-arrow-right"> Выйти</button>
+                </form>
                 <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
             </div>
         </div>
@@ -48,6 +52,7 @@
                     </h5>
                     <p class="card-text" th:text="${item.description()}"></p>
                     <form th:action="@{/cart/items}" method="post">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                         <div class="hstack gap-3">
                             <input type="hidden" name="id" th:value="${item.id()}">
                             <button type="submit" class="btn btn-outline-secondary" name="action" value="MINUS">-</button>
@@ -63,6 +68,7 @@
     <div class="row p-2">
         <div class="col">
             <form action="/buy" method="post" th:if="${!items.isEmpty()}">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                 <div class="hstack gap-3">
                     <h2 th:text="'Итого: '+${total}+' руб.'"/>
                     <!--

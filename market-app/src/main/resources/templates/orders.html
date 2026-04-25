@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
-
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="utf-8">
     <title>Витрина магазина</title>
@@ -17,6 +17,10 @@
                         <span class="badge text-bg-success">Витрина магазина</span>
                     </h2>
                     <a href="/cart/items" class="btn btn-secondary bi bi-cart4 ms-auto"> Корзина</a>
+                    <form th:action="@{/logout}" method="post" class="d-inline">
+                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                        <button type="submit" class="btn btn-outline-secondary bi bi-box-arrow-right"> Выйти</button>
+                    </form>
                     <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
                 </div>
             </div>
