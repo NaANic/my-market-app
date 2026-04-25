@@ -4,7 +4,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import reactor.core.scheduler.Schedulers;
 import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.entity.User;
@@ -13,21 +13,6 @@ import ru.yandex.practicum.mymarket.repository.UserRepository;
 
 import java.util.List;
 
-/**
- * Seeds the database on startup.
- *
- * <p>We use {@link ApplicationReadyEvent} + {@code subscribeOn(boundedElastic)} instead of
- * {@code CommandLineRunner} because:
- * <ul>
- *   <li>{@code CommandLineRunner.run()} is called from the main bootstrap thread while the
- *       Netty event loop is already running. Calling {@code blockLast()} there can trip
- *       BlockHound and risks starving the event loop.</li>
- *   <li>{@link ApplicationReadyEvent} fires after the server is fully started.
- *       {@code subscribeOn(Schedulers.boundedElastic())} moves the subscription onto a
- *       thread pool explicitly designed for blocking I/O, making the {@code blockLast()}
- *       call safe.</li>
- * </ul>
- */
 @Configuration
 public class DataInitializer {
 
@@ -63,17 +48,17 @@ public class DataInitializer {
    * Step 3.2 when the bean becomes available.
    */
   @Bean
-  ApplicationListener<ApplicationReadyEvent> seedUsers(UserRepository userRepository) {
-    return event -> {
-      var encoder = new BCryptPasswordEncoder();
-      userRepository.count()
-          .filter(count -> count == 0)
-          .flatMapMany(count -> userRepository.saveAll(List.of(
-              new User("alice", encoder.encode("alice123")),
-              new User("bob",   encoder.encode("bob123"))
-          )))
-          .subscribeOn(Schedulers.boundedElastic())
-          .blockLast();
-    };
+  ApplicationListener<ApplicationReadyEvent> seedUsers(
+      UserRepository userRepository,
+      PasswordEncoder passwordEncoder
+  ) {
+    return event -> userRepository.count()
+        .filter(count -> count == 0)
+        .flatMapMany(count -> userRepository.saveAll(List.of(
+            new User("alice", passwordEncoder.encode("alice123")),
+            new User("bob", passwordEncoder.encode("bob123"))
+        )))
+        .subscribeOn(Schedulers.boundedElastic())
+        .blockLast();
   }
 }
