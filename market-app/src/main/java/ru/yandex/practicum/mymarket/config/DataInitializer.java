@@ -4,9 +4,12 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import reactor.core.scheduler.Schedulers;
 import ru.yandex.practicum.mymarket.entity.Item;
+import ru.yandex.practicum.mymarket.entity.User;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
+import ru.yandex.practicum.mymarket.repository.UserRepository;
 
 import java.util.List;
 
@@ -49,5 +52,28 @@ public class DataInitializer {
         )))
             .subscribeOn(Schedulers.boundedElastic())
             .blockLast();
+  }
+
+  /**
+   * Seeds two pre-defined users on first startup.
+   *
+   * <p>NOTE: {@code new BCryptPasswordEncoder()} is intentionally inlined here
+   * because the {@code PasswordEncoder} bean is defined in {@code SecurityConfig}
+   * (Phase 3). This temporary instance will be replaced by proper injection in
+   * Step 3.2 when the bean becomes available.
+   */
+  @Bean
+  ApplicationListener<ApplicationReadyEvent> seedUsers(UserRepository userRepository) {
+    return event -> {
+      var encoder = new BCryptPasswordEncoder();
+      userRepository.count()
+          .filter(count -> count == 0)
+          .flatMapMany(count -> userRepository.saveAll(List.of(
+              new User("alice", encoder.encode("alice123")),
+              new User("bob",   encoder.encode("bob123"))
+          )))
+          .subscribeOn(Schedulers.boundedElastic())
+          .blockLast();
+    };
   }
 }
