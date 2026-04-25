@@ -13,6 +13,7 @@ import ru.yandex.practicum.mymarket.dto.*;
 import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +68,7 @@ public class ItemController {
     });
   }
 
+  @PreAuthorize("isAuthenticated()")
   @PostMapping("/items")
   public Mono<String> modifyCartFromItems(
       @RequestParam long id,
@@ -105,6 +107,7 @@ public class ItemController {
     });
   }
 
+  @PreAuthorize("isAuthenticated()")
   @PostMapping("/items/{id}")
   public Mono<String> modifyCartFromItem(
       @PathVariable long id,

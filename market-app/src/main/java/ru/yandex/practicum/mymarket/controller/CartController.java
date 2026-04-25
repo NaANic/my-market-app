@@ -1,5 +1,6 @@
 package ru.yandex.practicum.mymarket.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -9,6 +10,7 @@ import ru.yandex.practicum.mymarket.dto.CartAction;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
 
+@PreAuthorize("isAuthenticated()")
 @Controller
 @RequestMapping("/cart")
 public class CartController {

@@ -6,7 +6,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.service.OrderService;
+import org.springframework.security.access.prepost.PreAuthorize;
 
+@PreAuthorize("isAuthenticated()")
 @Controller
 public class OrderController {
 
