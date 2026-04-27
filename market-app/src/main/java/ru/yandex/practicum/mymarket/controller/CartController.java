@@ -4,10 +4,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartAction;
 import ru.yandex.practicum.mymarket.service.CartService;
+import ru.yandex.practicum.mymarket.service.CurrentUserService;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
 
 @PreAuthorize("isAuthenticated()")
@@ -17,11 +17,14 @@ public class CartController {
 
   private final CartService          cartService;
   private final PaymentClientService paymentClientService;
+  private final CurrentUserService   currentUserService;
 
   public CartController(CartService cartService,
-      PaymentClientService paymentClientService) {
+      PaymentClientService paymentClientService,
+      CurrentUserService currentUserService) {
     this.cartService          = cartService;
     this.paymentClientService = paymentClientService;
+    this.currentUserService   = currentUserService;
   }
 
   /**
@@ -34,24 +37,25 @@ public class CartController {
   @GetMapping("/items")
   public Mono<String> cart(
       @RequestParam(required = false) String error,
-      WebSession session,
       Model model
   ) {
     if (error != null && !error.isBlank()) {
       model.addAttribute("error", error);
     }
-    return populateCartModel(session.getId(), model).thenReturn("cart");
+    return currentUserService.getCurrentUserId()
+        .flatMap(userId -> populateCartModel(userId, model))
+        .thenReturn("cart");
   }
 
   @PostMapping("/items")
   public Mono<String> modifyCart(
       @RequestParam long id,
       @RequestParam CartAction action,
-      WebSession session,
       Model model
   ) {
-    return cartService.handleAction(session.getId(), id, action)
-        .then(populateCartModel(session.getId(), model))
+    return currentUserService.getCurrentUserId()
+        .flatMap(userId -> cartService.handleAction(userId, id, action)
+            .then(populateCartModel(userId, model)))
         .thenReturn("cart");
   }
 
@@ -75,14 +79,14 @@ public class CartController {
    * failure (network error, 5xx, timeout) as a zero balance, which disables
    * the "Купить" button rather than showing an unhandled error to the user.
    */
-  private Mono<Void> populateCartModel(String sessionId, Model model) {
+  private Mono<Void> populateCartModel(Long userId, Model model) {
     Mono<java.util.List<ru.yandex.practicum.mymarket.dto.ItemDto>> itemsMono =
-        cartService.getCartItemDtos(sessionId).collectList();
+        cartService.getCartItemDtos(userId).collectList();
 
-    Mono<Long> totalMono  = cartService.getCartTotal(sessionId);
+    Mono<Long> totalMono  = cartService.getCartTotal(userId);
 
     Mono<Long> balanceMono = paymentClientService.getBalance()
-        .onErrorReturn(0L);   // payment service unavailable → treat as insufficient funds
+        .onErrorReturn(0L);
 
     return Mono.zip(itemsMono, totalMono, balanceMono)
         .doOnNext(tuple -> {
