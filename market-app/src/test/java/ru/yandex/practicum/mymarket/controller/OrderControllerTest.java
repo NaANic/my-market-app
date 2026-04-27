@@ -22,8 +22,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import org.springframework.context.annotation.Import;
+import ru.yandex.practicum.mymarket.config.TestSecurityConfig;
+import ru.yandex.practicum.mymarket.repository.UserRepository;
+
+import org.springframework.security.test.context.support.WithMockUser;
+
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
+
 // No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
 @WebFluxTest
+@Import(TestSecurityConfig.class)
 class OrderControllerTest {
 
   @Autowired
@@ -38,6 +47,9 @@ class OrderControllerTest {
   @MockitoBean
   OrderService orderService;
 
+  @MockitoBean
+  UserRepository userRepository;
+
   /**
    * CartController now depends on PaymentClientService. All @WebFluxTest
    * classes share the same application context, so every class in this
@@ -48,6 +60,7 @@ class OrderControllerTest {
   PaymentClientService paymentClientService;
 
   @Test
+  @WithMockUser
   void getOrders_rendersOrdersList() {
     OrderDto order = new OrderDto(1L,
         List.of(new ItemDto(10L, "Мяч", null, null, 1500, 2)),
@@ -62,6 +75,7 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getOrders_emptyList_rendersPageWithoutOrders() {
     when(orderService.getOrders(any())).thenReturn(Flux.empty());
 
@@ -73,6 +87,7 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getOrder_rendersOrderPage() {
     OrderDto order = new OrderDto(5L,
         List.of(new ItemDto(10L, "Ракетка", null, null, 6100, 1)),
@@ -91,6 +106,7 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getOrder_withNewOrderFlag_showsCongrats() {
     OrderDto order = new OrderDto(7L, List.of(), 0L);
     when(orderService.getOrder(7L)).thenReturn(Mono.just(order));
@@ -103,10 +119,13 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void buy_redirectsToNewOrder() {
     when(orderService.createOrder(any())).thenReturn(Mono.just(42L));
 
-    webTestClient.post().uri("/buy")
+    webTestClient
+        .mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/buy")
         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
         .body(BodyInserters.fromFormData("dummy", "value"))
         .exchange()

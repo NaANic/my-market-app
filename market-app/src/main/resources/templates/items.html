@@ -20,9 +20,9 @@
                     </h2>
                     <a sec:authorize="isAuthenticated()" href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
                     <a sec:authorize="isAuthenticated()" href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
-                    <a sec:authorize="!isAuthenticated()" href="/login" class="btn btn-primary ms-auto bi bi-person"> Войти</a>
+                    <a sec:authorize="isAnonymous()" href="/login" class="btn btn-primary ms-auto bi bi-person"> Войти</a>
                     <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post" class="d-inline">
-                        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+                        <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                         <button type="submit" class="btn btn-outline-secondary bi bi-box-arrow-right"> Выйти</button>
                     </form>
                 </div>

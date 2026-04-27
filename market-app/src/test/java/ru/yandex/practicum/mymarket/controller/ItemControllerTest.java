@@ -15,6 +15,12 @@ import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
+import org.springframework.context.annotation.Import;
+import ru.yandex.practicum.mymarket.config.TestSecurityConfig;
+import ru.yandex.practicum.mymarket.repository.UserRepository;
+
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
+import org.springframework.security.test.context.support.WithMockUser;
 
 import java.util.List;
 import java.util.Map;
@@ -25,6 +31,7 @@ import static org.mockito.Mockito.*;
 
 // No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
 @WebFluxTest
+@Import(TestSecurityConfig.class)
 class ItemControllerTest {
 
   @Autowired
@@ -38,6 +45,9 @@ class ItemControllerTest {
 
   @MockitoBean
   OrderService orderService;
+
+  @MockitoBean
+  UserRepository userRepository;
 
   /**
    * CartController now depends on PaymentClientService. All @WebFluxTest
@@ -117,11 +127,13 @@ class ItemControllerTest {
   }
 
   @Test
+  @WithMockUser
   void postItems_redirectsWithParams() {
     when(cartService.handleAction(any(), eq(1L), eq(CartAction.PLUS)))
         .thenReturn(Mono.empty());
 
-    webTestClient.post().uri("/items?id=1&action=PLUS&sort=ALPHA&pageNumber=2&pageSize=10")
+    webTestClient.mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/items?id=1&action=PLUS&sort=ALPHA&pageNumber=2&pageSize=10")
         .exchange()
         .expectStatus().is3xxRedirection()
         .expectHeader().value("Location", loc ->
@@ -150,12 +162,14 @@ class ItemControllerTest {
   }
 
   @Test
+  @WithMockUser
   void postItem_modifiesCartAndRendersItemPage() {
     when(cartService.handleAction(any(), eq(1L), eq(CartAction.PLUS))).thenReturn(Mono.empty());
     when(itemService.findById(1L)).thenReturn(Mono.just(createItem(1L, "Мяч", 2500)));
     when(cartService.getItemCount(any(), eq(1L))).thenReturn(Mono.just(1));
 
-    webTestClient.post().uri("/items/1?action=PLUS")
+    webTestClient.mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/items/1?action=PLUS")
         .exchange()
         .expectStatus().isOk()
         .expectBody(String.class)
