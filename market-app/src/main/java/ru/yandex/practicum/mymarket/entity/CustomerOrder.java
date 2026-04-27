@@ -13,8 +13,8 @@ public class CustomerOrder {
   @Id
   private Long id;
 
-  @Column("session_id")
-  private String sessionId;
+  @Column("user_id")
+  private Long userId;
 
   @Column("total_sum")
   private long totalSum;
@@ -25,15 +25,15 @@ public class CustomerOrder {
 
   public CustomerOrder() {}
 
-  public CustomerOrder(String sessionId, long totalSum) {
-    this.sessionId = sessionId;
+  public CustomerOrder(Long userId, long totalSum) {
+    this.userId = userId;
     this.totalSum = totalSum;
   }
 
   public Long getId() { return id; }
 
-  public String getSessionId() { return sessionId; }
-  public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+  public Long getUserId() { return userId; }
+  public void setUserId(Long userId) { this.userId = userId; }
 
   public long getTotalSum() { return totalSum; }
   public void setTotalSum(long totalSum) { this.totalSum = totalSum; }

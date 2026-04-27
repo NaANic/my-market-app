@@ -47,3 +47,6 @@ ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES u
 
 CREATE INDEX IF NOT EXISTS ix_cart_items_user_id      ON cart_items(user_id);
 CREATE INDEX IF NOT EXISTS ix_customer_orders_user_id ON customer_orders(user_id);
+
+ALTER TABLE cart_items      ALTER COLUMN session_id DROP NOT NULL;
+ALTER TABLE customer_orders ALTER COLUMN session_id DROP NOT NULL;
