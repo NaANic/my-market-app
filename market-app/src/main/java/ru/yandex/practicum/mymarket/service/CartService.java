@@ -26,23 +26,23 @@ public class CartService {
     this.itemRepository = itemRepository;
   }
 
-  public Mono<Void> handleAction(String sessionId, long itemId, CartAction action) {
+  public Mono<Void> handleAction(Long userId, long itemId, CartAction action) {
     return switch (action) {
-      case PLUS   -> addItem(sessionId, itemId);
-      case MINUS  -> decreaseItem(sessionId, itemId);
-      case DELETE -> removeItem(sessionId, itemId);
+      case PLUS   -> addItem(userId, itemId);
+      case MINUS  -> decreaseItem(userId, itemId);
+      case DELETE -> removeItem(userId, itemId);
     };
   }
 
   // Used by OrderService to iterate cart items before clearing them
-  public Flux<CartItem> getCartItems(String sessionId) {
-    return cartItemRepository.findBySessionId(sessionId);
+  public Flux<CartItem> getCartItems(Long userId) {
+    return cartItemRepository.findByUserId(userId);
   }
 
   // Enriches each CartItem with its full Item data; used by controllers and OrderService.
   // Two-query approach: 1 query for cart rows + 1 IN query for all items — no N+1.
-  public Flux<ItemDto> getCartItemDtos(String sessionId) {
-    return cartItemRepository.findBySessionId(sessionId)
+  public Flux<ItemDto> getCartItemDtos(Long userId) {
+    return cartItemRepository.findByUserId(userId)
         .collectList()
         .flatMapMany(cartItems -> {
           if (cartItems.isEmpty()) return Flux.empty();
@@ -60,20 +60,19 @@ public class CartService {
         });
   }
 
-  public Mono<Integer> getItemCount(String sessionId, long itemId) {
-    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+  public Mono<Integer> getItemCount(Long userId, long itemId) {
+    return cartItemRepository.findByUserIdAndItemId(userId, itemId)
         .map(CartItem::getCount)
         .defaultIfEmpty(0);
   }
 
-  public Mono<Map<Long, Integer>> getCartItemCounts(String sessionId) {
-    return cartItemRepository.findBySessionId(sessionId)
+  public Mono<Map<Long, Integer>> getCartItemCounts(Long userId) {
+    return cartItemRepository.findByUserId(userId)
         .collectMap(CartItem::getItemId, CartItem::getCount);
   }
 
-  // Two-query approach: 1 query for cart rows + 1 IN query for all items — no N+1.
-  public Mono<Long> getCartTotal(String sessionId) {
-    return cartItemRepository.findBySessionId(sessionId)
+  public Mono<Long> getCartTotal(Long userId) {
+    return cartItemRepository.findByUserId(userId)
         .collectList()
         .flatMap(cartItems -> {
           if (cartItems.isEmpty()) return Mono.just(0L);
@@ -89,10 +88,8 @@ public class CartService {
         });
   }
 
-  public Mono<Void> addItem(String sessionId, long itemId) {
-    // flatMap must return Mono<CartItem> (non-empty) so that switchIfEmpty is not triggered
-    // after updating an existing item. The .then() is applied at the end of the whole chain.
-    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+  public Mono<Void> addItem(Long userId, long itemId) {
+    return cartItemRepository.findByUserIdAndItemId(userId, itemId)
         .flatMap(ci -> {
           ci.setCount(ci.getCount() + 1);
           return cartItemRepository.save(ci);
@@ -100,13 +97,13 @@ public class CartService {
         .switchIfEmpty(
             itemRepository.findById(itemId)
                 .switchIfEmpty(Mono.error(new EntityNotFoundException("Товар", itemId)))
-                .flatMap(item -> cartItemRepository.save(new CartItem(sessionId, item.getId(), 1)))
+                .flatMap(item -> cartItemRepository.save(new CartItem(userId, item.getId(), 1)))
         )
         .then();
   }
 
-  public Mono<Void> decreaseItem(String sessionId, long itemId) {
-    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+  public Mono<Void> decreaseItem(Long userId, long itemId) {
+    return cartItemRepository.findByUserIdAndItemId(userId, itemId)
         .flatMap(ci -> {
           if (ci.getCount() <= 1) {
             return cartItemRepository.delete(ci);
@@ -116,12 +113,12 @@ public class CartService {
         });
   }
 
-  public Mono<Void> removeItem(String sessionId, long itemId) {
-    return cartItemRepository.findBySessionIdAndItemId(sessionId, itemId)
+  public Mono<Void> removeItem(Long userId, long itemId) {
+    return cartItemRepository.findByUserIdAndItemId(userId, itemId)
         .flatMap(cartItemRepository::delete);
   }
 
-  public Mono<Void> clearCart(String sessionId) {
-    return cartItemRepository.deleteBySessionId(sessionId);
+  public Mono<Void> clearCart(Long userId) {
+    return cartItemRepository.deleteByUserId(userId);
   }
 }

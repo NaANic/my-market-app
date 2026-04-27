@@ -45,33 +45,21 @@ public class OrderService {
    *       meaningful error to the user.</li>
    *   <li>Persist order items and clear the cart (only on payment success).</li>
    * </ol>
-   *
-   * <p><b>Why {@code Mono.defer} around steps 3 and 4:</b>
-   * Without {@code defer}, Reactor evaluates the {@code Publisher} argument to
-   * {@code saveAll()} eagerly at chain-assembly time — before any signal flows
-   * and before {@code onErrorMap} has a chance to intercept the 402 error.
-   * In tests this causes a {@code NullPointerException} (Reactor's
-   * {@code newLast} internal) when the mock returns {@code null} for an
-   * unstubbed call. In production it would invoke {@code saveAll} even on
-   * payment failure. {@code defer} gates the call behind actual subscription,
-   * which only happens after the upstream {@code pay()} step completes
-   * successfully.
    */
-  public Mono<Long> createOrder(String sessionId) {
-    return cartService.getCartItemDtos(sessionId)
+  public Mono<Long> createOrder(Long userId) {
+    return cartService.getCartItemDtos(userId)
         .collectList()
         .flatMap(dtos -> {
           if (dtos.isEmpty()) {
-            return Mono.error(new CartIsEmptyException(sessionId));
+            return Mono.error(new CartIsEmptyException(String.valueOf(userId)));
           }
 
           long totalSum = dtos.stream()
               .mapToLong(dto -> dto.price() * dto.count())
               .sum();
 
-          return orderRepository.save(new CustomerOrder(sessionId, totalSum))
+          return orderRepository.save(new CustomerOrder(userId, totalSum))
               .flatMap(order ->
-                  // Step 2: charge
                   paymentClientService.pay(order.getId(), totalSum)
                       .onErrorMap(
                           ex -> ex instanceof WebClientResponseException wex
@@ -79,18 +67,15 @@ public class OrderService {
                           ex -> new PaymentFailedException(
                               order.getId(),
                               extractBalance((WebClientResponseException) ex)))
-                      // Step 3: save items — deferred so saveAll() is only
-                      // called when payment succeeds, never during assembly
                       .then(Mono.defer(() -> saveOrderItems(order.getId(), dtos)))
-                      // Step 4: clear cart — also deferred for the same reason
-                      .then(Mono.defer(() -> cartService.clearCart(sessionId)))
+                      .then(Mono.defer(() -> cartService.clearCart(userId)))
                       .thenReturn(order.getId())
               );
         });
   }
 
-  public Flux<OrderDto> getOrders(String sessionId) {
-    return orderRepository.findBySessionIdOrderByCreatedAtDesc(sessionId)
+  public Flux<OrderDto> getOrders(Long userId) {
+    return orderRepository.findByUserIdOrderByCreatedAtDesc(userId)
         .flatMap(order -> orderItemRepository.findByOrderId(order.getId())
             .collectList()
             .map(items -> OrderDto.of(order, items)));
