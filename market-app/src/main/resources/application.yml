@@ -16,6 +16,21 @@ spring:
   thymeleaf:
     cache: false
 
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            provider: keycloak
+            client-id: ${KEYCLOAK_CLIENT_ID:market-app}
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:please-override}
+            authorization-grant-type: client_credentials
+            scope:
+              - openid
+        provider:
+          keycloak:
+            issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8082/realms/market}
+
 cache:
   item:
     ttl-minutes: 5
