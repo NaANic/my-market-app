@@ -11,6 +11,7 @@ import ru.yandex.practicum.mymarket.config.R2dbcConfig;
 import ru.yandex.practicum.mymarket.config.TestDataR2dbcConfig;
 import ru.yandex.practicum.mymarket.entity.CartItem;
 import ru.yandex.practicum.mymarket.entity.Item;
+import ru.yandex.practicum.mymarket.entity.User;
 
 import java.util.List;
 
@@ -23,22 +24,32 @@ class CartItemRepositoryTest {
 
   @Autowired CartItemRepository cartItemRepository;
   @Autowired ItemRepository itemRepository;
+  @Autowired UserRepository userRepository;
 
   private Item item1, item2;
 
   // Use distinct user IDs (no users table seeded here, but FK is informational)
-  private static final Long USER_1 = 1L;
-  private static final Long USER_2 = 2L;
+  private Long USER_1;
+  private Long USER_2;
 
   @BeforeEach
   void setUp() {
     cartItemRepository.deleteAll()
         .then(itemRepository.deleteAll())
+        .then(userRepository.deleteAll())
+        .then(userRepository.save(new User("alice", "x"))
+            .doOnNext(u -> { /* stays USER_1 ref */ }))
+        .then(userRepository.save(new User("bob", "x")))
         .then(itemRepository.save(new Item("Товар 1", "Описание 1", "/img/1.jpg", 1000))
             .doOnNext(saved -> item1 = saved))
         .then(itemRepository.save(new Item("Товар 2", "Описание 2", "/img/2.jpg", 2000))
             .doOnNext(saved -> item2 = saved))
         .block();
+
+    // Capture actual user IDs since H2 IDENTITY may not give us 1, 2
+    var userIds = userRepository.findAll().collectList().block();
+    USER_1 = userIds.get(0).getId();
+    USER_2 = userIds.get(1).getId();
   }
 
   @Test

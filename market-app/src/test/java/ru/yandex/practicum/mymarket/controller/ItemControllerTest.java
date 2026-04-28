@@ -18,16 +18,15 @@ import ru.yandex.practicum.mymarket.service.PaymentClientService;
 import org.springframework.context.annotation.Import;
 import ru.yandex.practicum.mymarket.config.TestSecurityConfig;
 import ru.yandex.practicum.mymarket.repository.UserRepository;
-
 import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.security.test.context.support.WithMockUser;
-
 import java.util.List;
 import java.util.Map;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import ru.yandex.practicum.mymarket.service.CurrentUserService;
+import reactor.core.publisher.Mono;
 
 // No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
 @WebFluxTest
@@ -49,6 +48,9 @@ class ItemControllerTest {
   @MockitoBean
   UserRepository userRepository;
 
+  @MockitoBean
+  CurrentUserService currentUserService;
+
   /**
    * CartController now depends on PaymentClientService. All @WebFluxTest
    * classes share the same application context (no controller filter is set),
@@ -59,6 +61,11 @@ class ItemControllerTest {
    */
   @MockitoBean
   PaymentClientService paymentClientService;
+
+  @BeforeEach
+  void stubCurrentUser() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
+  }
 
   @Test
   void getItems_returnsItemsPage() {

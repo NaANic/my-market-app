@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.client.web.reactive.function.client.S
 import org.springframework.web.reactive.function.client.WebClient;
 import ru.yandex.practicum.payment.client.ApiClient;
 import ru.yandex.practicum.payment.client.api.PaymentApi;
+import org.springframework.context.annotation.Profile;
 
 /**
  * Configures the generated OpenAPI WebClient stub so it points at the
@@ -35,6 +36,7 @@ import ru.yandex.practicum.payment.client.api.PaymentApi;
  * {@link ServerOAuth2AuthorizedClientExchangeFilterFunction#setDefaultClientRegistrationId},
  * so callers do not need to specify it on every request.
  */
+@Profile("!test")
 @Configuration
 public class PaymentClientConfig {
 

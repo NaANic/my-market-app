@@ -11,6 +11,7 @@ import ru.yandex.practicum.mymarket.config.R2dbcConfig;
 import ru.yandex.practicum.mymarket.config.TestDataR2dbcConfig;
 import ru.yandex.practicum.mymarket.entity.CustomerOrder;
 import ru.yandex.practicum.mymarket.entity.OrderItem;
+import ru.yandex.practicum.mymarket.entity.User;
 
 import java.util.List;
 
@@ -23,15 +24,23 @@ class OrderRepositoryTest {
 
   @Autowired OrderRepository orderRepository;
   @Autowired OrderItemRepository orderItemRepository;
+  @Autowired UserRepository userRepository;
 
-  private static final Long USER_1 = 1L;
-  private static final Long USER_2 = 2L;
+  private Long USER_1;
+  private Long USER_2;
 
   @BeforeEach
   void setUp() {
     orderItemRepository.deleteAll()
         .then(orderRepository.deleteAll())
+        .then(userRepository.deleteAll())
+        .then(userRepository.save(new User("alice", "x")))
+        .then(userRepository.save(new User("bob", "x")))
         .block();
+
+    var userIds = userRepository.findAll().collectList().block();
+    USER_1 = userIds.get(0).getId();
+    USER_2 = userIds.get(1).getId();
   }
 
   @Test
