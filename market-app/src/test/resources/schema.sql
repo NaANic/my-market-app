@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS users
     enabled  BOOLEAN      NOT NULL DEFAULT TRUE
     );
 
-ALTER TABLE cart_items      ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id);
-ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES users(id);
+ALTER TABLE cart_items      ADD COLUMN IF NOT EXISTS user_id BIGINT;
+ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS user_id BIGINT;
 
 CREATE INDEX IF NOT EXISTS ix_cart_items_user_id      ON cart_items(user_id);
 CREATE INDEX IF NOT EXISTS ix_customer_orders_user_id ON customer_orders(user_id);
