@@ -80,6 +80,7 @@ services:
       SPRING_R2DBC_PASSWORD: shopfront
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: oauth2
       PAYMENT_SERVICE_URL: http://payment-service:8081
       KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/market
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-market-app}

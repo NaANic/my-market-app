@@ -16,9 +16,6 @@ spring:
   thymeleaf:
     cache: false
 
-  profiles:
-    include: oauth2
-
 cache:
   item:
     ttl-minutes: 5
