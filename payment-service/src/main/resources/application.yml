@@ -3,3 +3,10 @@ server:
 
 payment:
   initial-balance: 100000  # 1000 rubles in kopecks
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8082/realms/market}
