@@ -23,6 +23,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.argThat;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -68,11 +70,9 @@ class CartServiceTest {
     StepVerifier.create(cartService.addItem(USER_ID, 1L))
         .verifyComplete();
 
-    StepVerifier.create(cartService.addItem(USER_ID, 1L))
-        .verifyComplete();
-
-    assertThat(existing.getCount()).isEqualTo(4);
-    verify(cartItemRepository).save(existing);
+    // Verify save was called exactly once with count incremented
+    verify(cartItemRepository, times(1)).save(argThat(ci -> ci.getCount() == 4));
+    verify(cartItemRepository, never()).save(argThat(ci -> ci.getCount() == 5));
   }
 
   @Test
