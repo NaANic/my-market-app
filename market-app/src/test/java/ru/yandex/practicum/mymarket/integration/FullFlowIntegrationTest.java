@@ -31,6 +31,7 @@ import ru.yandex.practicum.mymarket.repository.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repository.OrderRepository;
 import ru.yandex.practicum.mymarket.repository.UserRepository;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,6 +44,10 @@ import static org.mockito.Mockito.when;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
         "spring.main.allow-bean-definition-overriding=true",
+        "spring.security.oauth2.client.registration.keycloak.client-id=disabled",
+        "spring.security.oauth2.client.registration.keycloak.client-secret=disabled",
+        "spring.security.oauth2.client.registration.keycloak.authorization-grant-type=client_credentials",
+        "spring.security.oauth2.client.provider.keycloak.issuer-uri=http://localhost:9999/realms/test",
         "spring.autoconfigure.exclude=" +
             "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration," +
             "org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration," +
@@ -122,6 +127,7 @@ class FullFlowIntegrationTest {
     when(userRepository.count()).thenReturn(Mono.just(2L));
     String encoded = new BCryptPasswordEncoder().encode("alice123");
     User alice = new User("alice", encoded);
+    ReflectionTestUtils.setField(alice, "id", 1L);
     when(userRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
     when(paymentClientService.pay(anyLong(), anyLong())).thenReturn(Mono.just(999_999L));
     when(paymentClientService.getBalance()).thenReturn(Mono.just(999_999L));

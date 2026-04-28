@@ -63,6 +63,10 @@ class CartServiceTest {
     when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.just(existing));
     when(cartItemRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+    when(itemRepository.findById(1L)).thenReturn(Mono.empty());
+
+    StepVerifier.create(cartService.addItem(USER_ID, 1L))
+        .verifyComplete();
 
     StepVerifier.create(cartService.addItem(USER_ID, 1L))
         .verifyComplete();
