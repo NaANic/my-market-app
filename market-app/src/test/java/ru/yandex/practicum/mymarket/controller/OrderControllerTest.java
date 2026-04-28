@@ -26,8 +26,9 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import ru.yandex.practicum.mymarket.service.CurrentUserService;
 import reactor.core.publisher.Mono;
+import org.springframework.test.context.ActiveProfiles;
 
-// No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
+@ActiveProfiles("test")
 @WebFluxTest
 @Import(TestSecurityConfig.class)
 class OrderControllerTest {

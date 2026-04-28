@@ -27,8 +27,11 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import ru.yandex.practicum.mymarket.service.CurrentUserService;
 import reactor.core.publisher.Mono;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.context.ActiveProfiles;
 
 // No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
+@ActiveProfiles("test")
 @WebFluxTest
 @Import(TestSecurityConfig.class)
 class ItemControllerTest {
