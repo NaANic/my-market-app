@@ -24,9 +24,10 @@ import static org.mockito.Mockito.when;
  */
 @WebFluxTest(
     controllers = PaymentController.class,
-    excludeFilters = @ComponentScan.Filter(
-        type = FilterType.ASSIGNABLE_TYPE,
-        classes = SecurityConfig.class)
+    excludeAutoConfiguration = {
+        org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.security.oauth2.resource.reactive.ReactiveOAuth2ResourceServerAutoConfiguration.class
+    }
 )
 @Import(PaymentExceptionHandler.class)
 class PaymentControllerTest {
