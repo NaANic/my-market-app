@@ -26,6 +26,10 @@ class CartItemRepositoryTest {
 
   private Item item1, item2;
 
+  // Use distinct user IDs (no users table seeded here, but FK is informational)
+  private static final Long USER_1 = 1L;
+  private static final Long USER_2 = 2L;
+
   @BeforeEach
   void setUp() {
     cartItemRepository.deleteAll()
@@ -38,64 +42,64 @@ class CartItemRepositoryTest {
   }
 
   @Test
-  void findBySessionId_returnsOnlyThisSession() {
+  void findByUserId_returnsOnlyThisUser() {
     cartItemRepository.saveAll(List.of(
-        new CartItem("session-1", item1.getId(), 2),
-        new CartItem("session-1", item2.getId(), 1),
-        new CartItem("session-2", item1.getId(), 3)
+        new CartItem(USER_1, item1.getId(), 2),
+        new CartItem(USER_1, item2.getId(), 1),
+        new CartItem(USER_2, item1.getId(), 3)
     )).then().block();
 
-    StepVerifier.create(cartItemRepository.findBySessionId("session-1").collectList())
+    StepVerifier.create(cartItemRepository.findByUserId(USER_1).collectList())
         .assertNext(items -> {
           assertThat(items).hasSize(2);
-          assertThat(items).allMatch(ci -> ci.getSessionId().equals("session-1"));
+          assertThat(items).allMatch(ci -> ci.getUserId().equals(USER_1));
         })
         .verifyComplete();
   }
 
   @Test
-  void findBySessionId_otherSession_returnsEmpty() {
-    cartItemRepository.save(new CartItem("session-1", item1.getId(), 1)).block();
+  void findByUserId_otherUser_returnsEmpty() {
+    cartItemRepository.save(new CartItem(USER_1, item1.getId(), 1)).block();
 
-    StepVerifier.create(cartItemRepository.findBySessionId("session-X").collectList())
+    StepVerifier.create(cartItemRepository.findByUserId(999L).collectList())
         .assertNext(items -> assertThat(items).isEmpty())
         .verifyComplete();
   }
 
   @Test
-  void findBySessionIdAndItemId_found() {
-    cartItemRepository.save(new CartItem("session-1", item1.getId(), 5)).block();
+  void findByUserIdAndItemId_found() {
+    cartItemRepository.save(new CartItem(USER_1, item1.getId(), 5)).block();
 
     StepVerifier.create(
-            cartItemRepository.findBySessionIdAndItemId("session-1", item1.getId()))
+            cartItemRepository.findByUserIdAndItemId(USER_1, item1.getId()))
         .assertNext(ci -> assertThat(ci.getCount()).isEqualTo(5))
         .verifyComplete();
   }
 
   @Test
-  void findBySessionIdAndItemId_differentSession_returnsEmpty() {
-    cartItemRepository.save(new CartItem("session-1", item1.getId(), 5)).block();
+  void findByUserIdAndItemId_differentUser_returnsEmpty() {
+    cartItemRepository.save(new CartItem(USER_1, item1.getId(), 5)).block();
 
     StepVerifier.create(
-            cartItemRepository.findBySessionIdAndItemId("session-2", item1.getId()))
+            cartItemRepository.findByUserIdAndItemId(USER_2, item1.getId()))
         .verifyComplete();
   }
 
   @Test
-  void deleteBySessionId_removesOnlyTargetSession() {
+  void deleteByUserId_removesOnlyTargetUser() {
     cartItemRepository.saveAll(List.of(
-        new CartItem("session-1", item1.getId(), 1),
-        new CartItem("session-1", item2.getId(), 1),
-        new CartItem("session-2", item1.getId(), 1)
+        new CartItem(USER_1, item1.getId(), 1),
+        new CartItem(USER_1, item2.getId(), 1),
+        new CartItem(USER_2, item1.getId(), 1)
     )).then().block();
 
-    cartItemRepository.deleteBySessionId("session-1").block();
+    cartItemRepository.deleteByUserId(USER_1).block();
 
-    StepVerifier.create(cartItemRepository.findBySessionId("session-1").collectList())
+    StepVerifier.create(cartItemRepository.findByUserId(USER_1).collectList())
         .assertNext(items -> assertThat(items).isEmpty())
         .verifyComplete();
 
-    StepVerifier.create(cartItemRepository.findBySessionId("session-2").collectList())
+    StepVerifier.create(cartItemRepository.findByUserId(USER_2).collectList())
         .assertNext(items -> assertThat(items).hasSize(1))
         .verifyComplete();
   }

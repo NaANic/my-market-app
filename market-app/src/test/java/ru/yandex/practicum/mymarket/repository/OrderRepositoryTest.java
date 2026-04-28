@@ -24,6 +24,9 @@ class OrderRepositoryTest {
   @Autowired OrderRepository orderRepository;
   @Autowired OrderItemRepository orderItemRepository;
 
+  private static final Long USER_1 = 1L;
+  private static final Long USER_2 = 2L;
+
   @BeforeEach
   void setUp() {
     orderItemRepository.deleteAll()
@@ -33,7 +36,7 @@ class OrderRepositoryTest {
 
   @Test
   void save_andLoadOrderItems_withOrderItemRepository() {
-    CustomerOrder saved = orderRepository.save(new CustomerOrder("s1", 5000)).block();
+    CustomerOrder saved = orderRepository.save(new CustomerOrder(USER_1, 5000)).block();
     assert saved != null;
 
     orderItemRepository.saveAll(List.of(
@@ -52,48 +55,48 @@ class OrderRepositoryTest {
 
   @Test
   void findById_returnsOrder() {
-    CustomerOrder saved = orderRepository.save(new CustomerOrder("s1", 3000)).block();
+    CustomerOrder saved = orderRepository.save(new CustomerOrder(USER_1, 3000)).block();
     assert saved != null;
 
     StepVerifier.create(orderRepository.findById(saved.getId()))
         .assertNext(order -> {
           assertThat(order.getTotalSum()).isEqualTo(3000);
-          assertThat(order.getSessionId()).isEqualTo("s1");
+          assertThat(order.getUserId()).isEqualTo(USER_1);
         })
         .verifyComplete();
   }
 
   @Test
-  void findBySessionIdOrderByCreatedAtDesc_orderedCorrectly() {
-    CustomerOrder order1 = orderRepository.save(new CustomerOrder("s1", 1000)).block();
+  void findByUserIdOrderByCreatedAtDesc_orderedCorrectly() {
+    CustomerOrder order1 = orderRepository.save(new CustomerOrder(USER_1, 1000)).block();
     assert order1 != null;
-    CustomerOrder order2 = orderRepository.save(new CustomerOrder("s1", 2000)).block();
+    CustomerOrder order2 = orderRepository.save(new CustomerOrder(USER_1, 2000)).block();
     assert order2 != null;
 
     try { Thread.sleep(50); } catch (InterruptedException ignored) {}
 
     StepVerifier.create(
-            orderRepository.findBySessionIdOrderByCreatedAtDesc("s1").collectList())
+            orderRepository.findByUserIdOrderByCreatedAtDesc(USER_1).collectList())
         .assertNext(orders -> {
           assertThat(orders).hasSize(2);
-          assertThat(orders).allMatch(o -> o.getSessionId().equals("s1"));
+          assertThat(orders).allMatch(o -> o.getUserId().equals(USER_1));
         })
         .verifyComplete();
   }
 
   @Test
-  void findBySessionIdOrderByCreatedAtDesc_differentSession_returnsEmpty() {
-    orderRepository.save(new CustomerOrder("s1", 1000)).block();
+  void findByUserIdOrderByCreatedAtDesc_differentUser_returnsEmpty() {
+    orderRepository.save(new CustomerOrder(USER_1, 1000)).block();
 
     StepVerifier.create(
-            orderRepository.findBySessionIdOrderByCreatedAtDesc("s2").collectList())
+            orderRepository.findByUserIdOrderByCreatedAtDesc(USER_2).collectList())
         .assertNext(orders -> assertThat(orders).isEmpty())
         .verifyComplete();
   }
 
   @Test
   void createdAt_isPopulatedByAuditing() {
-    CustomerOrder saved = orderRepository.save(new CustomerOrder("s1", 100)).block();
+    CustomerOrder saved = orderRepository.save(new CustomerOrder(USER_1, 100)).block();
     assert saved != null;
 
     StepVerifier.create(orderRepository.findById(saved.getId()))
