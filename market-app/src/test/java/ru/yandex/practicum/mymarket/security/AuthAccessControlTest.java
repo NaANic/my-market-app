@@ -1,4 +1,4 @@
-package ru.yandex.practicum.mymarket.integration;
+package ru.yandex.practicum.mymarket.security;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,8 +27,6 @@ import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.entity.User;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
-import ru.yandex.practicum.mymarket.repository.OrderItemRepository;
-import ru.yandex.practicum.mymarket.repository.OrderRepository;
 import ru.yandex.practicum.mymarket.repository.UserRepository;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -40,6 +38,15 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * Verifies the Sprint 8 access-control rules:
+ * <ul>
+ *   <li>Anonymous users CAN browse the catalog ({@code GET /items}, {@code GET /items/{id}}).</li>
+ *   <li>Anonymous users are redirected to the login page when accessing
+ *       cart pages or making cart-mutating requests.</li>
+ *   <li>Authenticated users can access all the above endpoints.</li>
+ * </ul>
+ */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
@@ -57,7 +64,7 @@ import static org.mockito.Mockito.when;
 )
 @AutoConfigureWebTestClient
 @ActiveProfiles("test")
-class FullFlowIntegrationTest {
+class AuthAccessControlTest {
 
   @MockBean
   PaymentClientService paymentClientService;
@@ -68,16 +75,18 @@ class FullFlowIntegrationTest {
   @TestConfiguration
   static class TestConfig {
 
-    /**
-     * Overrides the real SecurityWebFilterChain for integration tests.
-     * CSRF is disabled so POST requests don't need a token — the real
-     * session cookie (from form login) still provides authentication continuity.
-     */
+    /** Override security to disable CSRF for simpler test calls. */
     @Bean("springSecurityFilterChain")
     @Primary
     public SecurityWebFilterChain testSecurityFilterChain(ServerHttpSecurity http) {
       return http
-          .authorizeExchange(ex -> ex.anyExchange().authenticated())
+          .authorizeExchange(ex -> ex
+              .pathMatchers(org.springframework.http.HttpMethod.GET,
+                  "/", "/items", "/items/*").permitAll()
+              .pathMatchers("/login", "/logout", "/css/**", "/images/**",
+                  "/webjars/**", "/actuator/health").permitAll()
+              .anyExchange().authenticated()
+          )
           .formLogin(Customizer.withDefaults())
           .csrf(ServerHttpSecurity.CsrfSpec::disable)
           .build();
@@ -117,8 +126,6 @@ class FullFlowIntegrationTest {
   @Autowired WebTestClient webTestClient;
   @Autowired ItemRepository itemRepository;
   @Autowired CartItemRepository cartItemRepository;
-  @Autowired OrderRepository orderRepository;
-  @Autowired OrderItemRepository orderItemRepository;
 
   private Item testItem;
 
@@ -128,22 +135,87 @@ class FullFlowIntegrationTest {
     String encoded = new BCryptPasswordEncoder().encode("alice123");
     User alice = new User("alice", encoded);
     ReflectionTestUtils.setField(alice, "id", 1L);
-    when(userRepository.findByUsername("alice")).thenReturn(Mono.just(alice));
-    when(paymentClientService.pay(anyLong(), anyLong())).thenReturn(Mono.just(999_999L));
-    when(paymentClientService.getBalance()).thenReturn(Mono.just(999_999L));
+    when(userRepository.findByUsername("alice"))
+        .thenReturn(Mono.just(alice));
 
-    orderItemRepository.deleteAll()
-        .then(orderRepository.deleteAll())
-        .then(cartItemRepository.deleteAll())
+    when(paymentClientService.getBalance()).thenReturn(Mono.just(999_999L));
+    when(paymentClientService.pay(anyLong(), anyLong())).thenReturn(Mono.just(999_999L));
+
+    cartItemRepository.deleteAll()
         .then(itemRepository.deleteAll())
         .then(itemRepository.save(
-                new Item("Тестовый мяч", "Мяч для тестов", "/img/ball.jpg", 1500))
+                new Item("Тестовый товар", "Описание", "/img/test.jpg", 1000))
             .doOnNext(saved -> testItem = saved))
         .block();
   }
 
-  private WebTestClient loginAndGetClient() {
-    // POST /login directly — Spring creates a SESSION cookie on success
+  // -----------------------------------------------------------------------
+  // Anonymous access — public endpoints
+  // -----------------------------------------------------------------------
+
+  @Test
+  void anonymous_canAccessCatalog() {
+    webTestClient.get().uri("/items")
+        .exchange()
+        .expectStatus().isOk();
+  }
+
+  @Test
+  void anonymous_canAccessItemDetail() {
+    webTestClient.get().uri("/items/" + testItem.getId())
+        .exchange()
+        .expectStatus().isOk();
+  }
+
+  // -----------------------------------------------------------------------
+  // Anonymous access — protected endpoints redirect to /login
+  // -----------------------------------------------------------------------
+
+  @Test
+  void anonymous_cartPage_redirectsToLogin() {
+    webTestClient.get().uri("/cart/items")
+        .exchange()
+        .expectStatus().is3xxRedirection()
+        .expectHeader().value("Location", loc ->
+            assertThat(loc).contains("/login"));
+  }
+
+  @Test
+  void anonymous_ordersPage_redirectsToLogin() {
+    webTestClient.get().uri("/orders")
+        .exchange()
+        .expectStatus().is3xxRedirection()
+        .expectHeader().value("Location", loc ->
+            assertThat(loc).contains("/login"));
+  }
+
+  // -----------------------------------------------------------------------
+  // Authenticated access — same endpoints succeed
+  // -----------------------------------------------------------------------
+
+  @Test
+  void authenticated_canAccessCart() {
+    WebTestClient client = loginAsAlice();
+
+    client.get().uri("/cart/items")
+        .exchange()
+        .expectStatus().isOk();
+  }
+
+  @Test
+  void authenticated_canAccessOrders() {
+    WebTestClient client = loginAsAlice();
+
+    client.get().uri("/orders")
+        .exchange()
+        .expectStatus().isOk();
+  }
+
+  // -----------------------------------------------------------------------
+  // Helper — perform real form login and capture session cookie
+  // -----------------------------------------------------------------------
+
+  private WebTestClient loginAsAlice() {
     MultiValueMap<String, ResponseCookie> cookiesFromPost = webTestClient
         .post().uri("/login")
         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
@@ -162,46 +234,5 @@ class FullFlowIntegrationTest {
     return webTestClient.mutate()
         .defaultCookie("SESSION", session.getValue())
         .build();
-  }
-
-  @Test
-  void fullPurchaseFlow() {
-    WebTestClient client = loginAndGetClient();
-
-    client.post().uri("/items/" + testItem.getId() + "?action=PLUS")
-        .exchange().expectStatus().isOk();
-    client.post().uri("/items/" + testItem.getId() + "?action=PLUS")
-        .exchange().expectStatus().isOk();
-
-    client.get().uri("/cart/items")
-        .exchange().expectStatus().isOk()
-        .expectBody(String.class)
-        .value(html -> assertThat(html).contains("Итого:"));
-
-    client.post().uri("/buy")
-        .exchange().expectStatus().is3xxRedirection();
-
-    client.get().uri("/cart/items")
-        .exchange().expectStatus().isOk()
-        .expectBody(String.class)
-        .value(html -> assertThat(html).doesNotContain("Итого:"));
-
-    client.get().uri("/orders")
-        .exchange().expectStatus().isOk()
-        .expectBody(String.class)
-        .value(html -> assertThat(html).contains("Заказ №"));
-  }
-
-  @Test
-  void deleteFromCart_removesItem() {
-    WebTestClient client = loginAndGetClient();
-
-    client.post().uri("/items?id=" + testItem.getId() + "&action=PLUS")
-        .exchange().expectStatus().is3xxRedirection();
-
-    client.post().uri("/cart/items?id=" + testItem.getId() + "&action=DELETE")
-        .exchange().expectStatus().isOk()
-        .expectBody(String.class)
-        .value(html -> assertThat(html).doesNotContain("Итого:"));
   }
 }

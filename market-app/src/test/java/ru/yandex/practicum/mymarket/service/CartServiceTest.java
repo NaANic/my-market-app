@@ -13,6 +13,8 @@ import ru.yandex.practicum.mymarket.entity.CartItem;
 import ru.yandex.practicum.mymarket.entity.Item;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,8 +23,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.argThat;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class CartServiceTest {
 
   @Mock
@@ -34,19 +39,21 @@ class CartServiceTest {
   @InjectMocks
   CartService cartService;
 
+  private static final Long USER_ID = 1L;
+
   @Test
   void addItem_newItem_createsCartItemWithCountOne() {
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.empty());
     when(itemRepository.findById(1L))
         .thenReturn(Mono.just(createItem(1L, "Test", 100)));
     when(cartItemRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-    StepVerifier.create(cartService.addItem("s1", 1L))
+    StepVerifier.create(cartService.addItem(USER_ID, 1L))
         .verifyComplete();
 
     verify(cartItemRepository).save(argThat(ci ->
-        ci.getSessionId().equals("s1") &&
+        ci.getUserId().equals(USER_ID) &&
             ci.getItemId().equals(1L) &&
             ci.getCount() == 1
     ));
@@ -54,29 +61,28 @@ class CartServiceTest {
 
   @Test
   void addItem_existingItem_incrementsCount() {
-    CartItem existing = new CartItem("s1", 1L, 3);
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    CartItem existing = new CartItem(USER_ID, 1L, 3);
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.just(existing));
     when(cartItemRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-    // itemRepository.findById is referenced during chain construction (as switchIfEmpty arg),
-    // so it must be stubbed even though the switchIfEmpty branch won't be reached.
     when(itemRepository.findById(1L)).thenReturn(Mono.empty());
 
-    StepVerifier.create(cartService.addItem("s1", 1L))
+    StepVerifier.create(cartService.addItem(USER_ID, 1L))
         .verifyComplete();
 
-    assertThat(existing.getCount()).isEqualTo(4);
-    verify(cartItemRepository).save(existing);
+    // Verify save was called exactly once with count incremented
+    verify(cartItemRepository, times(1)).save(argThat(ci -> ci.getCount() == 4));
+    verify(cartItemRepository, never()).save(argThat(ci -> ci.getCount() == 5));
   }
 
   @Test
   void decreaseItem_countGreaterThanOne_decrementsCount() {
-    CartItem ci = new CartItem("s1", 1L, 5);
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    CartItem ci = new CartItem(USER_ID, 1L, 5);
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.just(ci));
     when(cartItemRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-    StepVerifier.create(cartService.decreaseItem("s1", 1L))
+    StepVerifier.create(cartService.decreaseItem(USER_ID, 1L))
         .verifyComplete();
 
     assertThat(ci.getCount()).isEqualTo(4);
@@ -86,12 +92,12 @@ class CartServiceTest {
 
   @Test
   void decreaseItem_countOne_removesItem() {
-    CartItem ci = new CartItem("s1", 1L, 1);
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    CartItem ci = new CartItem(USER_ID, 1L, 1);
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.just(ci));
     when(cartItemRepository.delete(any())).thenReturn(Mono.empty());
 
-    StepVerifier.create(cartService.decreaseItem("s1", 1L))
+    StepVerifier.create(cartService.decreaseItem(USER_ID, 1L))
         .verifyComplete();
 
     verify(cartItemRepository).delete(ci);
@@ -100,12 +106,12 @@ class CartServiceTest {
 
   @Test
   void removeItem_existing_deletesCartItem() {
-    CartItem ci = new CartItem("s1", 1L, 5);
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    CartItem ci = new CartItem(USER_ID, 1L, 5);
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.just(ci));
     when(cartItemRepository.delete(any())).thenReturn(Mono.empty());
 
-    StepVerifier.create(cartService.removeItem("s1", 1L))
+    StepVerifier.create(cartService.removeItem(USER_ID, 1L))
         .verifyComplete();
 
     verify(cartItemRepository).delete(ci);
@@ -113,49 +119,49 @@ class CartServiceTest {
 
   @Test
   void handleAction_delegatesToAddItem() {
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.empty());
     when(itemRepository.findById(1L))
         .thenReturn(Mono.just(createItem(1L, "T", 100)));
     when(cartItemRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-    StepVerifier.create(cartService.handleAction("s1", 1L, CartAction.PLUS))
+    StepVerifier.create(cartService.handleAction(USER_ID, 1L, CartAction.PLUS))
         .verifyComplete();
   }
 
   @Test
   void getCartTotal_sumsCorrectly() {
-    when(cartItemRepository.findBySessionId("s1")).thenReturn(Flux.just(
-        new CartItem("s1", 1L, 2),
-        new CartItem("s1", 2L, 3)
+    when(cartItemRepository.findByUserId(USER_ID)).thenReturn(Flux.just(
+        new CartItem(USER_ID, 1L, 2),
+        new CartItem(USER_ID, 2L, 3)
     ));
     when(itemRepository.findAllByIdIn(any())).thenReturn(Flux.just(
         createItem(1L, "A", 1000),
         createItem(2L, "B", 2500)
     ));
 
-    StepVerifier.create(cartService.getCartTotal("s1"))
+    StepVerifier.create(cartService.getCartTotal(USER_ID))
         .assertNext(total -> assertThat(total).isEqualTo(9500L))
         .verifyComplete();
   }
 
   @Test
   void getCartTotal_emptyCart_returnsZero() {
-    when(cartItemRepository.findBySessionId("s1")).thenReturn(Flux.empty());
+    when(cartItemRepository.findByUserId(USER_ID)).thenReturn(Flux.empty());
 
-    StepVerifier.create(cartService.getCartTotal("s1"))
+    StepVerifier.create(cartService.getCartTotal(USER_ID))
         .assertNext(total -> assertThat(total).isEqualTo(0L))
         .verifyComplete();
   }
 
   @Test
   void getCartItemCounts_returnsMap() {
-    when(cartItemRepository.findBySessionId("s1")).thenReturn(Flux.just(
-        new CartItem("s1", 1L, 2),
-        new CartItem("s1", 2L, 5)
+    when(cartItemRepository.findByUserId(USER_ID)).thenReturn(Flux.just(
+        new CartItem(USER_ID, 1L, 2),
+        new CartItem(USER_ID, 2L, 5)
     ));
 
-    StepVerifier.create(cartService.getCartItemCounts("s1"))
+    StepVerifier.create(cartService.getCartItemCounts(USER_ID))
         .assertNext(counts -> assertThat(counts)
             .containsEntry(1L, 2)
             .containsEntry(2L, 5))
@@ -164,32 +170,32 @@ class CartServiceTest {
 
   @Test
   void getItemCount_itemNotInCart_returnsZero() {
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
         .thenReturn(Mono.empty());
 
-    StepVerifier.create(cartService.getItemCount("s1", 1L))
+    StepVerifier.create(cartService.getItemCount(USER_ID, 1L))
         .assertNext(count -> assertThat(count).isEqualTo(0))
         .verifyComplete();
   }
 
   @Test
   void getItemCount_itemInCart_returnsCount() {
-    when(cartItemRepository.findBySessionIdAndItemId("s1", 1L))
-        .thenReturn(Mono.just(new CartItem("s1", 1L, 3)));
+    when(cartItemRepository.findByUserIdAndItemId(USER_ID, 1L))
+        .thenReturn(Mono.just(new CartItem(USER_ID, 1L, 3)));
 
-    StepVerifier.create(cartService.getItemCount("s1", 1L))
+    StepVerifier.create(cartService.getItemCount(USER_ID, 1L))
         .assertNext(count -> assertThat(count).isEqualTo(3))
         .verifyComplete();
   }
 
   @Test
   void clearCart_delegatesToRepository() {
-    when(cartItemRepository.deleteBySessionId("s1")).thenReturn(Mono.empty());
+    when(cartItemRepository.deleteByUserId(USER_ID)).thenReturn(Mono.empty());
 
-    StepVerifier.create(cartService.clearCart("s1"))
+    StepVerifier.create(cartService.clearCart(USER_ID))
         .verifyComplete();
 
-    verify(cartItemRepository).deleteBySessionId(eq("s1"));
+    verify(cartItemRepository).deleteByUserId(eq(USER_ID));
   }
 
   private Item createItem(Long id, String title, long price) {

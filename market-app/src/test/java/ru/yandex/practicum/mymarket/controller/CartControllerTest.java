@@ -14,15 +14,23 @@ import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.context.annotation.Import;
+import ru.yandex.practicum.mymarket.config.TestSecurityConfig;
+import ru.yandex.practicum.mymarket.repository.UserRepository;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
+import ru.yandex.practicum.mymarket.service.CurrentUserService;
+import reactor.core.publisher.Mono;
+import org.springframework.test.context.ActiveProfiles;
 
-// No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
+@ActiveProfiles("test")
 @WebFluxTest
+@Import(TestSecurityConfig.class)
 class CartControllerTest {
 
   @Autowired
@@ -36,6 +44,12 @@ class CartControllerTest {
 
   @MockitoBean
   OrderService orderService;
+
+  @MockitoBean
+  UserRepository userRepository;
+
+  @MockitoBean
+  CurrentUserService currentUserService;
 
   /**
    * CartController now injects PaymentClientService to call getBalance()
@@ -57,7 +71,9 @@ class CartControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getCart_returnsCartPage() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(cartService.getCartItemDtos(any())).thenReturn(Flux.just(
         new ItemDto(1L, "Мяч", "Desc", "/img/t.jpg", 2500, 2)
     ));
@@ -74,7 +90,9 @@ class CartControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getCart_emptyCart_totalSectionHidden() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(cartService.getCartItemDtos(any())).thenReturn(Flux.empty());
     when(cartService.getCartTotal(any())).thenReturn(Mono.just(0L));
 
@@ -87,7 +105,9 @@ class CartControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getCart_insufficientBalance_buttonDisabled() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(cartService.getCartItemDtos(any())).thenReturn(Flux.just(
         new ItemDto(1L, "Мяч", "Desc", "/img/t.jpg", 2500, 2)
     ));
@@ -103,7 +123,9 @@ class CartControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getCart_paymentServiceUnavailable_buttonDisabled() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(cartService.getCartItemDtos(any())).thenReturn(Flux.just(
         new ItemDto(1L, "Мяч", "Desc", "/img/t.jpg", 2500, 2)
     ));
@@ -119,13 +141,17 @@ class CartControllerTest {
   }
 
   @Test
+  @WithMockUser
   void postCart_delete_callsHandleActionAndReturnsCart() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(cartService.handleAction(any(), eq(1L), eq(CartAction.DELETE)))
         .thenReturn(Mono.empty());
     when(cartService.getCartItemDtos(any())).thenReturn(Flux.empty());
     when(cartService.getCartTotal(any())).thenReturn(Mono.just(0L));
 
-    webTestClient.post().uri("/cart/items?id=1&action=DELETE")
+    webTestClient
+        .mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/cart/items?id=1&action=DELETE")
         .exchange()
         .expectStatus().isOk();
 
@@ -133,13 +159,17 @@ class CartControllerTest {
   }
 
   @Test
+  @WithMockUser
   void postCart_plus_callsHandleAction() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(cartService.handleAction(any(), eq(3L), eq(CartAction.PLUS)))
         .thenReturn(Mono.empty());
     when(cartService.getCartItemDtos(any())).thenReturn(Flux.empty());
     when(cartService.getCartTotal(any())).thenReturn(Mono.just(0L));
 
-    webTestClient.post().uri("/cart/items?id=3&action=PLUS")
+    webTestClient
+        .mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/cart/items?id=3&action=PLUS")
         .exchange()
         .expectStatus().isOk();
 

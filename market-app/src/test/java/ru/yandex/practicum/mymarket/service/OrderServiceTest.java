@@ -21,7 +21,6 @@ import ru.yandex.practicum.mymarket.repository.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repository.OrderRepository;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -34,34 +33,16 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
 
-  @Mock
-  OrderRepository orderRepository;
-
-  @Mock
-  OrderItemRepository orderItemRepository;
-
-  @Mock
-  CartService cartService;
-
-  @Mock
-  PaymentClientService paymentClientService;
+  @Mock OrderRepository      orderRepository;
+  @Mock OrderItemRepository  orderItemRepository;
+  @Mock CartService          cartService;
+  @Mock PaymentClientService paymentClientService;
 
   @InjectMocks
   OrderService orderService;
 
-  /**
-   * Provide a non-null default for {@code saveAll} on every test.
-   *
-   * <p>{@code OrderService} now calls {@code orderItemRepository.saveAll(List)}
-   * (not {@code saveAll(Publisher)}), wrapped in {@code Mono.defer} so it is
-   * only invoked on subscription. Nevertheless a lenient stub is still required
-   * because MockitoExtension strict mode would fail any test that sets up a stub
-   * that is never exercised — which is exactly the case for the 402 failure tests
-   * where {@code saveAll} must NOT be called.
-   *
-   * <p>{@code anyList()} matches the concrete {@code List<OrderItem>} argument
-   * that {@code saveOrderItems()} constructs.
-   */
+  private static final Long USER_ID = 1L;
+
   @BeforeEach
   void stubSaveAll() {
     lenient().when(orderItemRepository.saveAll(anyList()))
@@ -72,12 +53,6 @@ class OrderServiceTest {
   // Helpers
   // -----------------------------------------------------------------------
 
-  /**
-   * Builds a plain {@link WebClientResponseException} with status 402.
-   * The generated {@code java/webclient} client throws the base class, not
-   * the {@code PaymentRequired} subclass, so tests use this factory method
-   * and rely on the status-code predicate in {@code OrderService}.
-   */
   private static WebClientResponseException make402(byte[] body) {
     return WebClientResponseException.create(
         HttpStatus.PAYMENT_REQUIRED.value(),
@@ -93,42 +68,41 @@ class OrderServiceTest {
   }
 
   // -----------------------------------------------------------------------
-  // createOrder — success path
+  // createOrder — success
   // -----------------------------------------------------------------------
 
   @Test
   void createOrder_success_savesOrderAndClearsCart() {
     ItemDto itemDto = new ItemDto(1L, "Товар", "Desc", "/img.jpg", 1500, 3);
-    when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(itemDto));
+    when(cartService.getCartItemDtos(USER_ID)).thenReturn(Flux.just(itemDto));
     when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
         Mono.just(orderWithId(inv.getArgument(0), 42L)));
     when(paymentClientService.pay(42L, 4500L)).thenReturn(Mono.just(95_500L));
     when(orderItemRepository.saveAll(anyList())).thenReturn(Flux.empty());
-    when(cartService.clearCart("s1")).thenReturn(Mono.empty());
+    when(cartService.clearCart(USER_ID)).thenReturn(Mono.empty());
 
-    StepVerifier.create(orderService.createOrder("s1"))
+    StepVerifier.create(orderService.createOrder(USER_ID))
         .assertNext(orderId -> assertThat(orderId).isEqualTo(42L))
         .verifyComplete();
 
     verify(orderRepository).save(any(CustomerOrder.class));
     verify(paymentClientService).pay(42L, 4500L);
     verify(orderItemRepository).saveAll(anyList());
-    verify(cartService).clearCart("s1");
+    verify(cartService).clearCart(USER_ID);
   }
 
   @Test
   void createOrder_calculatesTotalFromItemDtos() {
-    // total = 1000*2 + 500*3 = 3500
-    when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(
+    when(cartService.getCartItemDtos(USER_ID)).thenReturn(Flux.just(
         new ItemDto(1L, "A", null, null, 1000, 2),
         new ItemDto(2L, "B", null, null, 500, 3)
     ));
     when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
         Mono.just(orderWithId(inv.getArgument(0), 1L)));
     when(paymentClientService.pay(1L, 3500L)).thenReturn(Mono.just(96_500L));
-    when(cartService.clearCart("s1")).thenReturn(Mono.empty());
+    when(cartService.clearCart(USER_ID)).thenReturn(Mono.empty());
 
-    StepVerifier.create(orderService.createOrder("s1"))
+    StepVerifier.create(orderService.createOrder(USER_ID))
         .assertNext(id -> assertThat(id).isEqualTo(1L))
         .verifyComplete();
 
@@ -141,9 +115,9 @@ class OrderServiceTest {
 
   @Test
   void createOrder_emptyCart_emitsError() {
-    when(cartService.getCartItemDtos("s1")).thenReturn(Flux.empty());
+    when(cartService.getCartItemDtos(USER_ID)).thenReturn(Flux.empty());
 
-    StepVerifier.create(orderService.createOrder("s1"))
+    StepVerifier.create(orderService.createOrder(USER_ID))
         .expectErrorMatches(ex ->
             ex instanceof RuntimeException && ex.getMessage().contains("пуста"))
         .verify();
@@ -152,13 +126,13 @@ class OrderServiceTest {
   }
 
   // -----------------------------------------------------------------------
-  // createOrder — payment failure (402)
+  // createOrder — 402 payment required
   // -----------------------------------------------------------------------
 
   @Test
   void createOrder_paymentRequired_emitsPaymentFailedException() {
     ItemDto itemDto = new ItemDto(1L, "Товар", "Desc", "/img.jpg", 2000, 1);
-    when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(itemDto));
+    when(cartService.getCartItemDtos(USER_ID)).thenReturn(Flux.just(itemDto));
     when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
         Mono.just(orderWithId(inv.getArgument(0), 7L)));
 
@@ -167,14 +141,13 @@ class OrderServiceTest {
     when(paymentClientService.pay(7L, 2000L))
         .thenReturn(Mono.error(make402(body)));
 
-    StepVerifier.create(orderService.createOrder("s1"))
+    StepVerifier.create(orderService.createOrder(USER_ID))
         .expectErrorMatches(ex ->
             ex instanceof PaymentFailedException pfe
                 && pfe.getOrderId() == 7L
                 && pfe.getCurrentBalance() == 500L)
         .verify();
 
-    // saveAll and clearCart must never be reached on payment failure
     verify(orderItemRepository, never()).saveAll(anyList());
     verify(cartService, never()).clearCart(any());
   }
@@ -182,7 +155,7 @@ class OrderServiceTest {
   @Test
   void createOrder_paymentRequired_malformedBody_balanceFallsBackToMinusOne() {
     ItemDto itemDto = new ItemDto(1L, "Товар", null, null, 1000, 1);
-    when(cartService.getCartItemDtos("s1")).thenReturn(Flux.just(itemDto));
+    when(cartService.getCartItemDtos(USER_ID)).thenReturn(Flux.just(itemDto));
     when(orderRepository.save(any(CustomerOrder.class))).thenAnswer(inv ->
         Mono.just(orderWithId(inv.getArgument(0), 8L)));
 
@@ -190,7 +163,7 @@ class OrderServiceTest {
     when(paymentClientService.pay(8L, 1000L))
         .thenReturn(Mono.error(make402(malformed)));
 
-    StepVerifier.create(orderService.createOrder("s1"))
+    StepVerifier.create(orderService.createOrder(USER_ID))
         .expectErrorMatches(ex ->
             ex instanceof PaymentFailedException pfe
                 && pfe.getCurrentBalance() == -1L)
@@ -206,15 +179,15 @@ class OrderServiceTest {
 
   @Test
   void getOrders_returnsOrderDtos() {
-    CustomerOrder order = orderWithId(new CustomerOrder("s1", 3000), 1L);
+    CustomerOrder order = orderWithId(new CustomerOrder(USER_ID, 3000), 1L);
     OrderItem orderItem = new OrderItem(1L, 10L, "Товар А", 1500, 2);
 
-    when(orderRepository.findBySessionIdOrderByCreatedAtDesc("s1"))
+    when(orderRepository.findByUserIdOrderByCreatedAtDesc(USER_ID))
         .thenReturn(Flux.just(order));
     when(orderItemRepository.findByOrderId(1L))
         .thenReturn(Flux.just(orderItem));
 
-    StepVerifier.create(orderService.getOrders("s1"))
+    StepVerifier.create(orderService.getOrders(USER_ID))
         .assertNext(dto -> {
           assertThat(dto.id()).isEqualTo(1L);
           assertThat(dto.totalSum()).isEqualTo(3000);
@@ -226,7 +199,7 @@ class OrderServiceTest {
 
   @Test
   void getOrder_existing_returnsOrderDto() {
-    CustomerOrder order = orderWithId(new CustomerOrder("s1", 5000), 7L);
+    CustomerOrder order = orderWithId(new CustomerOrder(USER_ID, 5000), 7L);
     OrderItem orderItem = new OrderItem(7L, 20L, "Ракетка", 5000, 1);
 
     when(orderRepository.findById(7L)).thenReturn(Mono.just(order));
