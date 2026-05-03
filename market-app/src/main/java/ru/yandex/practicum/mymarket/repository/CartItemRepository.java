@@ -10,27 +10,27 @@ import ru.yandex.practicum.mymarket.entity.CartItem;
 
 public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long> {
 
-  Flux<CartItem> findBySessionId(String sessionId);
+  Flux<CartItem> findByUserId(Long userId);
 
-  Mono<CartItem> findBySessionIdAndItemId(String sessionId, Long itemId);
+  Mono<CartItem> findByUserIdAndItemId(Long userId, Long itemId);
 
   // Derived delete — returns Mono<Void>, no @Modifying needed in R2DBC
-  Mono<Void> deleteBySessionId(String sessionId);
+  Mono<Void> deleteByUserId(Long userId);
 
   /**
    * One-query JOIN alternative: fetches cart rows AND their item data in a
    * single roundtrip, returning a flat {@link CartItemRow} projection.
    *
-   * <p>Use this instead of {@link #findBySessionId} + per-item
+   * <p>Use this instead of {@link #findByUserId} + per-item
    * {@code itemRepository.findById} to eliminate N+1 at the SQL level.
    * CartService currently uses the two-query IN approach
-   * ({@code findBySessionId} + {@code ItemRepository#findAllByIdIn}), which is
+   * ({@code findByUserId} + {@code ItemRepository#findAllByIdIn}), which is
    * simpler to maintain. Switch to this method if you need maximum throughput
    * and a single DB roundtrip matters.
    */
   @Query("""
       SELECT ci.id            AS cart_item_id,
-             ci.session_id,
+             ci.user_id,
              ci.count,
              i.id             AS item_id,
              i.title          AS item_title,
@@ -39,7 +39,7 @@ public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Lon
              i.price          AS item_price
       FROM   cart_items ci
       JOIN   items       i ON ci.item_id = i.id
-      WHERE  ci.session_id = :sessionId
+      WHERE  ci.user_id = :userId
       """)
-  Flux<CartItemRow> findWithItemsBySessionId(@Param("sessionId") String sessionId);
+  Flux<CartItemRow> findWithItemsByUserId(@Param("userId") Long userId);
 }
