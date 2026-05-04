@@ -15,16 +15,25 @@ import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
-
+import org.springframework.context.annotation.Import;
+import ru.yandex.practicum.mymarket.config.TestSecurityConfig;
+import ru.yandex.practicum.mymarket.repository.UserRepository;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
+import org.springframework.security.test.context.support.WithMockUser;
 import java.util.List;
 import java.util.Map;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import ru.yandex.practicum.mymarket.service.CurrentUserService;
+import reactor.core.publisher.Mono;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.context.ActiveProfiles;
 
 // No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
+@ActiveProfiles("test")
 @WebFluxTest
+@Import(TestSecurityConfig.class)
 class ItemControllerTest {
 
   @Autowired
@@ -39,6 +48,12 @@ class ItemControllerTest {
   @MockitoBean
   OrderService orderService;
 
+  @MockitoBean
+  UserRepository userRepository;
+
+  @MockitoBean
+  CurrentUserService currentUserService;
+
   /**
    * CartController now depends on PaymentClientService. All @WebFluxTest
    * classes share the same application context (no controller filter is set),
@@ -49,6 +64,11 @@ class ItemControllerTest {
    */
   @MockitoBean
   PaymentClientService paymentClientService;
+
+  @BeforeEach
+  void stubCurrentUser() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
+  }
 
   @Test
   void getItems_returnsItemsPage() {
@@ -117,11 +137,13 @@ class ItemControllerTest {
   }
 
   @Test
+  @WithMockUser
   void postItems_redirectsWithParams() {
     when(cartService.handleAction(any(), eq(1L), eq(CartAction.PLUS)))
         .thenReturn(Mono.empty());
 
-    webTestClient.post().uri("/items?id=1&action=PLUS&sort=ALPHA&pageNumber=2&pageSize=10")
+    webTestClient.mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/items?id=1&action=PLUS&sort=ALPHA&pageNumber=2&pageSize=10")
         .exchange()
         .expectStatus().is3xxRedirection()
         .expectHeader().value("Location", loc ->
@@ -150,12 +172,14 @@ class ItemControllerTest {
   }
 
   @Test
+  @WithMockUser
   void postItem_modifiesCartAndRendersItemPage() {
     when(cartService.handleAction(any(), eq(1L), eq(CartAction.PLUS))).thenReturn(Mono.empty());
     when(itemService.findById(1L)).thenReturn(Mono.just(createItem(1L, "Мяч", 2500)));
     when(cartService.getItemCount(any(), eq(1L))).thenReturn(Mono.just(1));
 
-    webTestClient.post().uri("/items/1?action=PLUS")
+    webTestClient.mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/items/1?action=PLUS")
         .exchange()
         .expectStatus().isOk()
         .expectBody(String.class)

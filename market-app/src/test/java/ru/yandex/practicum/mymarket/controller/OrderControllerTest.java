@@ -15,15 +15,22 @@ import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 import ru.yandex.practicum.mymarket.service.OrderService;
 import ru.yandex.practicum.mymarket.service.PaymentClientService;
-
 import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import org.springframework.context.annotation.Import;
+import ru.yandex.practicum.mymarket.config.TestSecurityConfig;
+import ru.yandex.practicum.mymarket.repository.UserRepository;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
+import ru.yandex.practicum.mymarket.service.CurrentUserService;
+import reactor.core.publisher.Mono;
+import org.springframework.test.context.ActiveProfiles;
 
-// No controller filter → loads all controllers → same context shared across all @WebFluxTest classes
+@ActiveProfiles("test")
 @WebFluxTest
+@Import(TestSecurityConfig.class)
 class OrderControllerTest {
 
   @Autowired
@@ -38,6 +45,12 @@ class OrderControllerTest {
   @MockitoBean
   OrderService orderService;
 
+  @MockitoBean
+  UserRepository userRepository;
+
+  @MockitoBean
+  CurrentUserService currentUserService;
+
   /**
    * CartController now depends on PaymentClientService. All @WebFluxTest
    * classes share the same application context, so every class in this
@@ -48,7 +61,9 @@ class OrderControllerTest {
   PaymentClientService paymentClientService;
 
   @Test
+  @WithMockUser
   void getOrders_rendersOrdersList() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     OrderDto order = new OrderDto(1L,
         List.of(new ItemDto(10L, "Мяч", null, null, 1500, 2)),
         3000L);
@@ -62,7 +77,9 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getOrders_emptyList_rendersPageWithoutOrders() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     when(orderService.getOrders(any())).thenReturn(Flux.empty());
 
     webTestClient.get().uri("/orders")
@@ -73,7 +90,9 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getOrder_rendersOrderPage() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
     OrderDto order = new OrderDto(5L,
         List.of(new ItemDto(10L, "Ракетка", null, null, 6100, 1)),
         6100L);
@@ -91,7 +110,10 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void getOrder_withNewOrderFlag_showsCongrats() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
+
     OrderDto order = new OrderDto(7L, List.of(), 0L);
     when(orderService.getOrder(7L)).thenReturn(Mono.just(order));
 
@@ -103,10 +125,15 @@ class OrderControllerTest {
   }
 
   @Test
+  @WithMockUser
   void buy_redirectsToNewOrder() {
+    when(currentUserService.getCurrentUserId()).thenReturn(Mono.just(1L));
+
     when(orderService.createOrder(any())).thenReturn(Mono.just(42L));
 
-    webTestClient.post().uri("/buy")
+    webTestClient
+        .mutateWith(SecurityMockServerConfigurers.csrf())
+        .post().uri("/buy")
         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
         .body(BodyInserters.fromFormData("dummy", "value"))
         .exchange()

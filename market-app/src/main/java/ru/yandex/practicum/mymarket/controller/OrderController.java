@@ -1,24 +1,30 @@
 package ru.yandex.practicum.mymarket.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.WebSession;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.service.CurrentUserService;
 import ru.yandex.practicum.mymarket.service.OrderService;
 
+@PreAuthorize("isAuthenticated()")
 @Controller
 public class OrderController {
 
-  private final OrderService orderService;
+  private final OrderService       orderService;
+  private final CurrentUserService currentUserService;
 
-  public OrderController(OrderService orderService) {
-    this.orderService = orderService;
+  public OrderController(OrderService orderService,
+      CurrentUserService currentUserService) {
+    this.orderService       = orderService;
+    this.currentUserService = currentUserService;
   }
 
   @GetMapping("/orders")
-  public Mono<String> orders(WebSession session, Model model) {
-    return orderService.getOrders(session.getId())
+  public Mono<String> orders(Model model) {
+    return currentUserService.getCurrentUserId()
+        .flatMapMany(orderService::getOrders)
         .collectList()
         .doOnNext(orders -> model.addAttribute("orders", orders))
         .thenReturn("orders");
@@ -39,8 +45,9 @@ public class OrderController {
   }
 
   @PostMapping("/buy")
-  public Mono<String> buy(WebSession session) {
-    return orderService.createOrder(session.getId())
+  public Mono<String> buy() {
+    return currentUserService.getCurrentUserId()
+        .flatMap(orderService::createOrder)
         .map(orderId -> "redirect:/orders/" + orderId + "?newOrder=true");
   }
 }

@@ -1,15 +1,15 @@
 package ru.yandex.practicum.payment;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import ru.yandex.practicum.payment.model.PaymentRequest;
 
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -17,8 +17,18 @@ import static org.mockito.Mockito.when;
 /**
  * WebFlux slice test: boots only the web layer (controller + exception handler).
  * {@link BalanceStore} is mocked so tests are fully deterministic.
+ *
+ * <p>{@link SecurityConfig} is excluded from the slice — these tests focus on
+ * controller behaviour, not security rules. Authentication/authorization is
+ * exercised in dedicated tests (see Phase 6 of Sprint 8).
  */
-@WebFluxTest(controllers = PaymentController.class)
+@WebFluxTest(
+    controllers = PaymentController.class,
+    excludeAutoConfiguration = {
+        org.springframework.boot.autoconfigure.security.reactive.ReactiveSecurityAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.security.oauth2.resource.reactive.ReactiveOAuth2ResourceServerAutoConfiguration.class
+    }
+)
 @Import(PaymentExceptionHandler.class)
 class PaymentControllerTest {
 
@@ -96,8 +106,6 @@ class PaymentControllerTest {
             .exchange()
             .expectStatus().isEqualTo(HttpStatus.PAYMENT_REQUIRED)
             .expectBody()
-            // These field names must match PaymentError schema and
-            // OrderService.extractBalance() which reads "balance"
             .jsonPath("$.message").isEqualTo("Insufficient funds")
             .jsonPath("$.balance").isEqualTo(500);
     }
